@@ -98,11 +98,67 @@ const routes = [
     name: "events",
     component: () => import("../views/settings/SettingsEventsView.vue"),
   },
+  {
+    path: "/login",
+    name: "login",
+    component: () => import("../views/auth/LoginView.vue"),
+  },
+  {
+    path: "/onboarding",
+    name: "onboarding",
+    component: () => import("../views/auth/OnboardingView.vue"),
+  },
 ];
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
+});
+
+router.beforeEach(async (to, from, next) => {
+  // Check auth status
+  let hasUsers = false;
+  try {
+    const res = await fetch("/api/auth/status");
+    const data = await res.json();
+    hasUsers = data.has_users;
+  } catch (e) {
+    console.error("Failed to fetch auth status", e);
+    // If the network request fails, proceed carefully.
+    // If we have a local token we can still try to let them through.
+    const token = localStorage.getItem("halyard_token");
+    if (token) {
+      return next();
+    }
+  }
+
+  const token = localStorage.getItem("halyard_token");
+
+  if (!hasUsers) {
+    // If no users exist, enforce onboarding
+    if (to.path !== "/onboarding") {
+      next("/onboarding");
+    } else {
+      next();
+    }
+  } else {
+    // Users exist
+    if (!token) {
+      // Unauthenticated
+      if (to.path !== "/login") {
+        next("/login");
+      } else {
+        next();
+      }
+    } else {
+      // Authenticated
+      if (to.path === "/login" || to.path === "/onboarding") {
+        next("/");
+      } else {
+        next();
+      }
+    }
+  }
 });
 
 export default router;

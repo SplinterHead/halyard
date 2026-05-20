@@ -293,7 +293,7 @@ const headers = [
   { title: "Driver", key: "driver", width: "100px", align: "center" as const },
   { title: "Subnet", key: "subnet", align: "start" as const },
   { title: "Gateway", key: "gateway", align: "start" as const },
-  { title: "Node", key: "node", width: "150px", align: "center" as const },
+  { title: "Node", key: "node", width: "150px", align: "start" as const },
   { title: "Created", key: "created_at", align: "start" as const },
   {
     title: "Actions",

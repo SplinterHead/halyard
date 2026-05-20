@@ -315,7 +315,8 @@ const fetchNodeDetail = async () => {
 const setupStatsStream = () => {
   if (ws) ws.close()
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/api/nodes/stream`;
+  const token = localStorage.getItem('halyard_token') || '';
+  const wsUrl = `${protocol}//${window.location.host}/api/nodes/stream?token=${encodeURIComponent(token)}`;
   ws = new WebSocket(wsUrl);
 
   ws.onmessage = (event) => {

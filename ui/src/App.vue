@@ -1,6 +1,7 @@
 <template>
   <v-app id="halyard" class="bg-transparent">
     <v-navigation-drawer 
+      v-if="!isAuthPage"
       v-model="drawer" 
       :rail="rail"
       permanent
@@ -71,7 +72,7 @@
       </template>
     </v-navigation-drawer>
 
-    <v-app-bar flat class="glass-panel border-b-0" elevation="0">
+    <v-app-bar v-if="!isAuthPage" flat class="glass-panel border-b-0" elevation="0">
       <v-app-bar-nav-icon @click.stop="rail = !rail" color="white"></v-app-bar-nav-icon>
       <v-spacer></v-spacer>
       
@@ -90,7 +91,7 @@
     </v-app-bar>
 
     <v-main class="bg-transparent">
-      <v-container fluid class="pa-6">
+      <v-container fluid :class="isAuthPage ? 'pa-0 fill-height justify-center align-center d-flex' : 'pa-6'">
         <router-view v-slot="{ Component }">
           <v-fade-transition mode="out-in">
             <component :is="Component" />
@@ -102,10 +103,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 
+const route = useRoute()
 const drawer = ref(true)
 const rail = ref(true)
+
+// Check if we are currently on an auth page (Login or Onboarding)
+const isAuthPage = computed(() => {
+  return route.path === '/login' || route.path === '/onboarding'
+})
 </script>
 
 <style>

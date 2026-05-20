@@ -434,7 +434,8 @@ const startLogStream = () => {
   logs.value = [];
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/api/containers/logs?id=${id}&node=${node}`;
+  const token = localStorage.getItem("halyard_token") || "";
+  const wsUrl = `${protocol}//${window.location.host}/api/containers/logs?id=${id}&node=${node}&token=${encodeURIComponent(token)}`;
 
   const socket = new WebSocket(wsUrl);
 

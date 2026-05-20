@@ -1,7 +1,9 @@
 package manager
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -87,6 +89,13 @@ func (d *DB) initSchema() error {
 			key TEXT PRIMARY KEY,
 			value TEXT
 		);`,
+		`CREATE TABLE IF NOT EXISTS users (
+			id TEXT PRIMARY KEY,
+			username TEXT UNIQUE,
+			real_name TEXT,
+			password_hash TEXT,
+			created_at DATETIME
+		);`,
 		`CREATE TABLE IF NOT EXISTS registries (
 			id TEXT PRIMARY KEY,
 			name TEXT,
@@ -154,3 +163,29 @@ func (d *DB) PruneNodeStats(retentionHours int) error {
 	_, err := d.Exec(`DELETE FROM node_stats WHERE timestamp < datetime('now', '-' || ? || ' hours')`, retentionHours)
 	return err
 }
+
+func (d *DB) GetOrCreateSessionSecret() ([]byte, error) {
+	var secretHex string
+	err := d.QueryRow("SELECT value FROM settings WHERE key = 'auth_token_secret'").Scan(&secretHex)
+	if err == sql.ErrNoRows {
+		// Generate random 32 bytes
+		bytes := make([]byte, 32)
+		if _, err := rand.Read(bytes); err != nil {
+			return nil, fmt.Errorf("failed to generate random bytes: %w", err)
+		}
+		secretHex = hex.EncodeToString(bytes)
+		_, err = d.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('auth_token_secret', ?)", secretHex)
+		if err != nil {
+			return nil, fmt.Errorf("failed to save session secret: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to query session secret: %w", err)
+	}
+
+	secretBytes, err := hex.DecodeString(secretHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode session secret: %w", err)
+	}
+	return secretBytes, nil
+}
+

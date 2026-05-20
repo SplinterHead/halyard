@@ -30,6 +30,11 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	sessionSecret, err := db.GetOrCreateSessionSecret()
+	if err != nil {
+		log.Fatalf("Failed to initialize session secret: %v", err)
+	}
+
 	svcMgr := manager.NewServiceManager(cli)
 	nodeMgr := manager.NewNodeManager(cli, db)
 	stackMgr := manager.NewStackManager(cli)
@@ -51,6 +56,83 @@ func main() {
 	go statsWorker.Start(context.Background())
 
 	// API Endpoints
+	http.HandleFunc("/api/auth/status", func(w http.ResponseWriter, r *http.Request) {
+		hasUsers, err := db.HasUsers()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"has_users": hasUsers})
+	})
+
+	http.HandleFunc("/api/auth/register", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req api.RegisterRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		user, err := db.CreateUser(req.Username, req.RealName, req.Password)
+		if err != nil {
+			if strings.Contains(err.Error(), "registration is disabled") {
+				http.Error(w, err.Error(), http.StatusForbidden)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		token, err := manager.GenerateToken(user.Username, sessionSecret)
+		if err != nil {
+			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(api.AuthResponse{
+			Token: token,
+			User:  *user,
+		})
+	})
+
+	http.HandleFunc("/api/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req api.LoginRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		user, err := db.AuthenticateUser(req.Username, req.Password)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		token, err := manager.GenerateToken(user.Username, sessionSecret)
+		if err != nil {
+			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(api.AuthResponse{
+			Token: token,
+			User:  *user,
+		})
+	})
+
 	http.HandleFunc("/api/swarm/tokens", func(w http.ResponseWriter, r *http.Request) {
 		swarmInfo, err := cli.SwarmInspect(r.Context())
 		if err != nil {
@@ -901,7 +983,8 @@ func main() {
 	})
 
 	log.Println("Server listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	handler := AuthMiddleware(db, sessionSecret, http.DefaultServeMux)
+	log.Fatal(http.ListenAndServe(":8080", handler))
 }
 
 func getEncodedRegistryAuth(repo string, registries []api.Registry) string {
@@ -969,4 +1052,42 @@ func getEncodedRegistryAuth(repo string, registries []api.Registry) string {
 	}
 
 	return base64.URLEncoding.EncodeToString(jsonData)
+}
+
+func AuthMiddleware(db *manager.DB, secret []byte, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		
+		// Skip authentication for health check, static files, and auth endpoints
+		if !strings.HasPrefix(path, "/api/") ||
+			path == "/api/auth/status" ||
+			path == "/api/auth/login" ||
+			path == "/api/auth/register" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Retrieve token from Authorization header or URL query parameter (for WebSockets)
+		var tokenStr string
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+			tokenStr = strings.TrimPrefix(authHeader, "Bearer ")
+		} else {
+			tokenStr = r.URL.Query().Get("token")
+		}
+
+		if tokenStr == "" {
+			http.Error(w, "Unauthorized: Missing token", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate token
+		_, err := manager.ValidateToken(tokenStr, secret)
+		if err != nil {
+			http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

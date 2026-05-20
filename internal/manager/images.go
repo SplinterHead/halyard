@@ -222,7 +222,7 @@ func (m *ImageAggregator) CheckImage(ctx context.Context, nodeID string, reposit
 	}
 
 	if result.Error != "" {
-		return false, fmt.Errorf(result.Error)
+		return false, fmt.Errorf("%s", result.Error)
 	}
 
 	return result.UpToDate, nil

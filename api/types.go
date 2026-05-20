@@ -293,3 +293,30 @@ type DockerHubRateLimit struct {
 	Reset     int `json:"reset"`
 }
 
+// User represents the system user
+type User struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	RealName  string    `json:"real_name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// RegisterRequest represents the payload to register the first user
+type RegisterRequest struct {
+	Username string `json:"username"`
+	RealName string `json:"real_name"`
+	Password string `json:"password"`
+}
+
+// LoginRequest represents the payload to authenticate
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// AuthResponse represents the login/onboarding success payload
+type AuthResponse struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}
+
