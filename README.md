@@ -1,121 +1,82 @@
 # <img src="ui/public/logo.png" width="64" height="64" align="center"> Halyard
 
-**Halyard** is a modern, lightweight, and visual GitOps management platform designed specifically for Docker Swarm clusters. Much like a halyard is used to hoist sails, this platform allows you to effortlessly deploy and manage stacks across your Swarm cluster with precision. It bridges the gap between your Git repositories and your Swarm cluster, providing automated reconciliation, deep observability, and a premium dashboard experience.
+**Halyard** is a modern, lightweight, and intuitive GitOps & observability platform designed specifically for Docker Swarm clusters. Built from the ground up to give you full visibility and automated deployment capabilities, Halyard hoists your Swarm services, stacks, and nodes into a unified, stunning control center.
 
-![Halyard Dashboard](https://raw.githubusercontent.com/lewis-england/halyard/main/ui/public/banner.png) _(Placeholder for your actual screenshot)_
-
-## ✨ Key Features
-
-### 🔄 GitOps Reconciliation
-
-- **Auto-Sync**: Periodically checks your remote Git repositories (GitHub, GitLab, Self-hosted) for new commits and automatically redeploys your stacks.
-- **Selective Sync**: Choose between syncing a single `compose.yml` file or pulling the entire repository for complex stacks requiring `.env` files or additional config assets.
-- **Manual Overrides**: Force an immediate sync at any time with a single click, fetching the absolute latest SHA from your branch.
-
-### 🧹 Advanced Cluster-Wide Pruning
-
-- **Multi-Node Distribution**: Trigger cleanups across your entire cluster at once. The Manager leverages internal Swarm overlay routing to trigger concurrent resource prunes across all active worker Agent nodes simultaneously.
-- **Granular Operator Controls**: A premium, modal operator dialog lets you customize precisely what resources to purge, covering:
-  - **Unused Containers**: Removes stopped containers.
-  - **Unused Networks**: Removes networks with no associated tasks.
-  - **Unused Volumes**: Safely purges unmounted local volumes (highlighted with built-in UI caution safety warnings).
-  - **Unused Images**: Clears out untagged dangling images.
-- **Deep Image Cleanups (-a)**: A nested transition option to run full unused image prunes, purging all images that do not have at least one active container associated with them.
-
-### 🔒 Docker Hub Rate Limit Quota Tracking
-
-- **Automated Pull Quotas**: Monitors Docker Hub pull rate limits directly from the cluster nodes.
-- **Credential-Aware Fetching**: Automatically uses configured registry credentials to pull authenticated quota headers, with an immediate, transparent fallback to anonymous public IP limits if no credentials are configured.
-- **Card-Integrated Progress Meters**: Configured Docker Hub registry boxes showcase a custom progress linear meter tracking exact remaining pulls and a manual trigger to force a live rate refresh.
-- **Anonymous Alert Banner**: Displays a prominent, high-fidelity alert banner if Docker Hub is unauthenticated, detailing remaining IP pulls and offering a one-click button to immediately pre-fill and authenticate the Docker Hub preset.
-
-### 👁️ Deep Observability & UI Polish
-
-- **Real-time Metrics**: Live CPU, Memory, and Uptime streaming for every node in the cluster via persistent WebSockets.
-- **Historical Analytics**: Automated persistence of node resource usage into a local SQLite database for 24-hour performance trend analysis.
-- **Interactive Graphs**: Dynamic time-series performance charts (CPU/Memory) integrated directly into node views using ApexCharts.
-- **Node Detail Dashboard**: Granular technical inspection of Swarm nodes, including OS details, architecture, Docker engine metadata, and custom label management.
-- **Standardized Technical Sizing**: Unified action controls, row tools, and refresh elements globally to a crisp `36px` footprint for clean visual balance.
-- **Production Pagination**: All resource tables are standardized to default to **25 items per page**, keeping large-scale Swarm list cleanups accessible.
-- **Clean Label Formatting**: Strips digest SHAs and tags from active container and service listings, showing beautiful, human-readable image names.
-- **Relocated Card Actions**: Registry cards feature relocated edit and delete controls inside header title append slots, making card lists highly compact and modern.
-- **Automated Diagnostics**: Instantly triggers image update inspections immediately upon loading the Images view.
-- **Container Log Streaming**: Instant, low-latency log streaming for any container across the entire cluster.
-- **Visual Status Indicators**: Stable, non-intrusive status bars across all resource tables providing instant health feedback.
-- **Events & Audit Trail**: A dedicated **Events** view provides a chronological history of every deployment, including commit SHAs, timestamps, and full execution logs.
+With Halyard, you can stop SSH-ing into your manager nodes to deploy stacks, read logs, or prune resources. Instead, manage everything from a centralized, real-time visual dashboard that automatically synchronizes your services with Git.
 
 ---
 
-## 🏗️ Architecture
+## 🚀 What Halyard Can Do For You
 
-Halyard consists of two primary components:
+### 🔄 Automated GitOps & Stacks Deployment
+Keep your infrastructure in perfect sync with your codebase without manual intervention.
+* **Continuous Git Reconciliation**: Point Halyard to a Git repository (GitHub, GitLab, or self-hosted), specify a branch, and let Halyard automatically pull and sync your `compose.yml` definitions to the cluster.
+* **Smart Configurations & `.env` Support**: Full capability to pull down complete repositories, ensuring your local assets, environment files, and configurations are ready when deploying complex stacks.
+* **One-Click Manual Syncs**: Instantly force an immediate stack reconciliation to deploy hotfixes or latest commits.
+* **Deployment Audit Trail**: Access a chronological history of all deployment events, commit SHAs, and sync details in a clean unified feed.
 
-1. **Halyard Manager**: The central control plane, REST API host, SQLite state store, and Vue 3 frontend host.
-2. **Halyard Agent**: A lightweight daemon deployed globally (`mode: global`) across every node to stream host-local metrics, volumes, logs, and command prunes.
+### 📊 Single Pane-of-Glass Observability
+Gain complete visual clarity over what is running inside your cluster.
+* **Real-Time Node Metrics**: Track live CPU usage, memory utilization, and node status across your entire cluster at once.
+* **Historical Performance Trends**: Analyze resource usage trends over the last 24 hours to scale resources properly.
+* **Container Log Streaming**: Access low-latency, real-time log streams for any container in the cluster with a single click—no shell command required.
+* **Complete Asset Inspector**: Deeply inspect Swarm nodes, active containers, images, networks, volumes, secrets, and configurations.
+
+### 🧹 One-Click Resource Deletion & Swarm Pruning
+Reclaim wasted server disk space safely and efficiently.
+* **Node-Local Volume Deletion**: Easily remove unused volumes directly from the interface. Halyard handles the background routing to locate the correct node and delete it safely.
+* **Service Lifecycle Controls**: Scale, configure, or terminate Swarm services directly from the UI with clear confirmation safety prompts.
+* **Cluster-Wide Pruning**: Trigger concurrent cleanups of unused resources (stopped containers, networks, volumes, and dangling images) across all worker nodes simultaneously.
+
+### 🔒 Registry Protection & Rate Limit Meters
+Never get rate-limited by registry pull limits again.
+* **Registry Rate-Limit Progress Meters**: Proactively monitor your Docker Hub pull rate limit right on your registry cards.
+* **Credential-Aware Fetching**: Displays authenticated quota limits if credentials are set, with seamless anonymous limit fallback tracking for public IPs.
+* **Authentication Banner Alerts**: Highlights public registry setups with one-click actions to authenticate and secure your pull quotas.
 
 ---
 
-## 🚀 Getting Started
+## ⚡ Quick Start
 
-### 1. Deployment
-
-Deploy Halyard to your cluster using the provided stack file:
+Deploy Halyard to your Swarm cluster with a single command:
 
 ```bash
 docker stack deploy -c deploy/docker-stack.yml halyard
 ```
 
-### 2. Connect a Repository
+Open your browser and navigate to `http://<your-manager-ip>:8080` to start managing your cluster.
 
-1.  Navigate to **Git -> Repositories**.
-2.  Add your repository URL and credentials.
-3.  Go to **Git -> Syncs** and create a new sync entry for your Stack.
-
----
-
-## 🗺️ Roadmap
-
-- [x] **GitOps Engine**: Automatic reconciliation of stacks from Git.
-- [x] **Observability**: Real-time cluster-wide metrics and volume inspection.
-- [x] **Historical Trends**: 24h resource usage analytics.
-- [x] **Container Log Streaming**: View live logs for any container directly in the dashboard.
-- [x] **Advanced Prune options**: Cluster-wide custom pruning controls.
-- [x] **Registry Quotas**: Real-time Docker Hub rate limit tracking.
-- [ ] **Webhook Support**: Trigger syncs via GitHub/GitLab webhooks.
-- [ ] **Auth & RBAC**: Secure the dashboard with OIDC/LDAP.
-- [ ] **Self-Update**: Enable Halyard to manage its own versioning via its GitOps engine.
-- [x] **Secret Injection**: Direct management of Docker Secrets and Configs via the UI.
+### Connecting a Repository
+1. Navigate to **Git -> Repositories** and add your repository details.
+2. Go to **Git -> Syncs** and create a new sync entry to deploy your stack from Git.
 
 ---
 
-## 🛠️ Development
+## ✨ Built for the Modern Swarm Operator
 
-### Prerequisites
+* **Premium Glassmorphic Interface**: A high-contrast, beautiful dark-mode theme designed specifically for technical operations.
+* **Highly Responsive**: Optimized real-time reactive tables that let you monitor hundreds of services without lag.
+* **Ultra-Lightweight**: Built on high-performance Go and Vue.js 3, consuming negligible CPU and memory on your host.
+* **Zero Complex Setup**: No heavy databases or external state stores required. Simply deploy the stack and go.
 
-- Go 1.22+
-- Node.js 20+ (with NPM)
-- A running Docker Swarm cluster
+---
 
-### Local Setup
+## 🗺️ Feature Roadmap
 
-```bash
-# Clone the repo
-git clone https://github.com/SplinterHead/halyard.git
-
-# Run Manager (API + Static UI)
-make build-all
-./manager
-
-# Hot-reload UI for development
-cd ui && npm run dev
-```
+- [x] **Automated GitOps Engine**: Continuous sync of stacks from Git.
+- [x] **Multi-Node Observability**: Real-time metrics and volume detection.
+- [x] **Live Container Logs**: High-performance streaming of logs to the UI.
+- [x] **Cluster-Wide Cleanups**: Advanced, granular pruning controls.
+- [x] **Registry Limit Gauges**: Live Docker Hub quota metrics.
+- [x] **Secret & Config Management**: View and modify secrets and configurations visually.
+- [ ] **Webhook Integrations**: Sync instantly when code is pushed.
+- [ ] **OIDC / LDAP Authentication**: Secure access control.
+- [ ] **Self-Managing Stacks**: Allow Halyard to self-update via its own GitOps pipeline.
 
 ---
 
 ## ⚖️ License
 
-Distributed under the MIT License. See `LICENSE` for more information.
-
----
+Distributed under the MIT License. See `LICENSE` for details.
 
 **Built with ❤️ for the Docker Swarm Community.**
