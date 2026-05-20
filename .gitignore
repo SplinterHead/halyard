@@ -1,7 +1,8 @@
 # Binaries
 bin/
-manager
-agent
+/manager
+/agent
+/main
 
 # Node
 node_modules/
