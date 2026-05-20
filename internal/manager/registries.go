@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lewis-england/halyard/api"
+	"github.com/SplinterHead/halyard/api"
 )
 
 type RegistryManager struct {

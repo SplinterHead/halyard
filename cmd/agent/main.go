@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/lewis-england/halyard/api"
-	"github.com/lewis-england/halyard/internal/agent"
-	"github.com/lewis-england/halyard/internal/pkg/docker"
+	"github.com/SplinterHead/halyard/api"
+	"github.com/SplinterHead/halyard/internal/agent"
+	"github.com/SplinterHead/halyard/internal/pkg/docker"
 )
 
 func main() {

@@ -14,8 +14,8 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/gorilla/websocket"
-	"github.com/lewis-england/halyard/api"
-	"github.com/lewis-england/halyard/internal/pkg/docker"
+	"github.com/SplinterHead/halyard/api"
+	"github.com/SplinterHead/halyard/internal/pkg/docker"
 )
 
 type NodeManager struct {

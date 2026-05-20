@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lewis-england/halyard/api"
+	"github.com/SplinterHead/halyard/api"
 )
 
 type GitSyncManager struct {

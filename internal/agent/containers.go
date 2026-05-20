@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/lewis-england/halyard/api"
-	"github.com/lewis-england/halyard/internal/pkg/docker"
+	"github.com/SplinterHead/halyard/api"
+	"github.com/SplinterHead/halyard/internal/pkg/docker"
 )
 
 type ContainerManager struct {

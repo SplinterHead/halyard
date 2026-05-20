@@ -73,7 +73,7 @@
           </div>
           <v-text-field
             v-model="username"
-            placeholder="lewis-england"
+            placeholder="SplinterHead"
             prepend-inner-icon="mdi-account-outline"
             variant="outlined"
             density="comfortable"

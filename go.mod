@@ -1,4 +1,4 @@
-module github.com/lewis-england/halyard
+module github.com/SplinterHead/halyard
 
 go 1.26.3
 

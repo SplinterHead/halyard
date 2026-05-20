@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/docker/docker/api/types"
-	"github.com/lewis-england/halyard/api"
-	"github.com/lewis-england/halyard/internal/pkg/docker"
+	"github.com/SplinterHead/halyard/api"
+	"github.com/SplinterHead/halyard/internal/pkg/docker"
 )
 
 type NetworkManager struct {

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lewis-england/halyard/api"
+	"github.com/SplinterHead/halyard/api"
 	"golang.org/x/crypto/bcrypt"
 )
 

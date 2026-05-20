@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lewis-england/halyard/api"
+	"github.com/SplinterHead/halyard/api"
 	_ "modernc.org/sqlite"
 )
 

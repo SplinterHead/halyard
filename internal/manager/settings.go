@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/lewis-england/halyard/api"
+	"github.com/SplinterHead/halyard/api"
 )
 
 type SettingsManager struct {
