@@ -1,0 +1,305 @@
+:root {
+  --primary-glow: conic-gradient(from 180deg at 50% 50%, #8B5CF633 0deg, #3B82F633 180deg, #8B5CF633 360deg);
+  --secondary-glow: radial-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
+  --font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  background-color: #050505;
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(139, 92, 246, 0.15), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.15), transparent 25%);
+  background-attachment: fixed;
+  color: #E2E8F0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Global Typography Overrides */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family) !important;
+  letter-spacing: -0.02em !important;
+}
+
+.text-h1, .text-h2, .text-h3, .text-h4, .text-h5, .text-h6, .text-subtitle-1, .text-subtitle-2, .text-body-1, .text-body-2, .text-button, .text-caption, .text-overline {
+  font-family: var(--font-family) !important;
+}
+
+/* Monospace Font Overrides */
+code, pre, .font-mono, .text-mono {
+  font-family: var(--font-mono) !important;
+  font-weight: 400 !important;
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(17, 25, 40, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+}
+
+.glass-card {
+  background: rgba(30, 41, 59, 0.4) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.glass-card:hover {
+  transform: translateY(-4px);
+  background: rgba(30, 41, 59, 0.6) !important;
+  border: 1px solid rgba(139, 92, 246, 0.3) !important;
+  box-shadow: 0 10px 40px -10px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* Gradient Text */
+.text-gradient {
+  background: linear-gradient(135deg, #A78BFA 0%, #3B82F6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Animations */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-border {
+  0% { border-color: rgba(139, 92, 246, 0.3); box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.2); }
+  50% { border-color: rgba(139, 92, 246, 0.8); box-shadow: 0 0 15px 0 rgba(139, 92, 246, 0.4); }
+  100% { border-color: rgba(139, 92, 246, 0.3); box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.2); }
+}
+
+.sync-pulsing {
+  animation: pulse-border 2s infinite ease-in-out;
+}
+
+.status-glow-success {
+  box-shadow: 0 0 12px 2px rgba(34, 197, 94, 0.4);
+}
+
+.status-glow-warning {
+  box-shadow: 0 0 12px 2px rgba(245, 158, 11, 0.4);
+}
+
+.status-glow-error {
+  box-shadow: 0 0 12px 2px rgba(239, 68, 68, 0.4);
+}
+
+.status-glow-info {
+  box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.4);
+}
+
+/* Vuetify Overrides for premium look */
+.v-application {
+  background: transparent !important;
+  font-family: var(--font-family) !important;
+}
+
+.v-btn {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-weight: 500 !important;
+  border-radius: 8px !important;
+}
+
+.v-list {
+  background: transparent !important;
+}
+
+.v-list-item--active {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.15) 0%, transparent 100%) !important;
+  border-left: 3px solid #8B5CF6 !important;
+}
+.v-list-item--active::before {
+  opacity: 0 !important;
+}
+
+.v-navigation-drawer {
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.v-app-bar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.v-main {
+  min-height: 100vh;
+}
+
+/* LED Dots with Glow */
+.led-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+}
+
+.led-green {
+  background-color: #22c55e;
+  box-shadow: 0 0 10px 2px rgba(34, 197, 94, 0.4);
+}
+
+.led-red {
+  background-color: #ef4444;
+  box-shadow: 0 0 10px 2px rgba(239, 68, 68, 0.4);
+}
+
+.led-orange {
+  background-color: #f59e0b;
+  box-shadow: 0 0 10px 2px rgba(245, 158, 11, 0.4);
+}
+
+.led-blue {
+  background-color: #3b82f6;
+  box-shadow: 0 0 10px 2px rgba(59, 130, 246, 0.4);
+}
+
+.led-grey {
+  background-color: #94a3b8;
+}
+
+/* Status Bar Rows */
+.status-bar-row {
+  border-left: 4px solid transparent !important;
+  transition: all 0.2s ease;
+}
+
+.status-bar-row.status-success {
+  border-left-color: #22c55e !important;
+}
+
+.status-bar-row.status-warning {
+  border-left-color: #f59e0b !important;
+}
+
+.status-bar-row.status-info {
+  border-left-color: #3b82f6 !important;
+}
+
+.status-bar-row.status-grey {
+  border-left-color: #94a3b8 !important;
+}
+
+.v-data-table-row:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Pulse Glow Animation */
+.animate-pulse-glow {
+  animation: pulse-glow 3s infinite;
+}
+
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.3);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(139, 92, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0);
+  }
+}
+
+/* Consolidated utility classes to eliminate duplicated scoped styles */
+.text-truncate-400 {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-truncate-200 {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.break-word {
+  word-break: break-all;
+}
+
+.pre-wrap {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.scroll-y-400 {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Shared class for all Refresh buttons to have a consistent background and size matching action buttons */
+.refresh-btn {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #E2E8F0 !important;
+  transition: all 0.2s ease !important;
+}
+
+.refresh-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(139, 92, 246, 0.4) !important;
+}
+
+/* Force all action and refresh buttons to be exactly 36px tall and 36px wide */
+.refresh-btn,
+.v-data-table td .v-btn {
+  height: 36px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Ensure the icons inside refresh and action buttons are scaled beautifully to fit the 36px size */
+.refresh-btn .v-icon,
+.v-data-table td .v-btn .v-icon {
+  font-size: 18px !important;
+}
+
+
