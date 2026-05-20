@@ -51,7 +51,7 @@
         items-per-page="25"
       >
         <template v-slot:item.hostname="{ value }">
-          <span class="text-body-2 font-weight-bold">{{ value }}</span>
+          <code>{{ value }}</code>
         </template>
 
         <template v-slot:item.role="{ value }">

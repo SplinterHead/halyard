@@ -152,9 +152,7 @@
         </template>
 
         <template v-slot:item.node="{ value }">
-          <div class="text-center">
-            <span class="text-caption font-mono text-grey-lighten-1">{{ value }}</span>
-          </div>
+          <code>{{ value }}</code>
         </template>
 
         <template v-slot:item.created_at="{ value }">
@@ -216,7 +214,7 @@ const headers = [
     title: "Node",
     key: "node",
     sortable: true,
-    align: "center" as const,
+    align: "start" as const,
   },
   {
     title: "Stack",

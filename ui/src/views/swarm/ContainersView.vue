@@ -165,7 +165,7 @@ const headers = [
     align: "start" as const,
   },
   { title: "Status", key: "status", align: "start" as const },
-  { title: "Node", key: "node", width: "150px", align: "center" as const },
+  { title: "Node", key: "node", width: "150px", align: "start" as const },
   { title: "Created", key: "created_at", align: "start" as const },
 ];
 

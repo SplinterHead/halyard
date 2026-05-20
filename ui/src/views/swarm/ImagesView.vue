@@ -83,7 +83,7 @@
 
         <!-- Node Column -->
         <template v-slot:item.node="{ value }">
-          <span class="font-mono text-body-2">{{ value }}</span>
+          <code>{{ value }}</code>
         </template>
 
         <!-- Size Column -->
