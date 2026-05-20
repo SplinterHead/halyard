@@ -47,17 +47,15 @@
 
         <!-- Real Name Input -->
         <div class="mb-4">
-          <div class="text-caption text-mono font-weight-bold text-primary mb-2 text-uppercase tracking-wider">
+          <div class="text-caption font-weight-bold text-primary mb-2 text-uppercase tracking-wider">
             Operator Real Name
           </div>
           <v-text-field
             v-model="realName"
-            placeholder="Lewis England"
             prepend-inner-icon="mdi-badge-account-horizontal-outline"
             variant="outlined"
             density="comfortable"
             color="primary"
-            class="text-mono"
             :rules="[v => !!v || 'Real name is required']"
             hide-details="auto"
             bg-color="rgba(0, 0, 0, 0.2)"
@@ -68,17 +66,15 @@
 
         <!-- Username Input -->
         <div class="mb-4">
-          <div class="text-caption text-mono font-weight-bold text-primary mb-2 text-uppercase tracking-wider">
+          <div class="text-caption font-weight-bold text-primary mb-2 text-uppercase tracking-wider">
             System Username
           </div>
           <v-text-field
             v-model="username"
-            placeholder="SplinterHead"
             prepend-inner-icon="mdi-account-outline"
             variant="outlined"
             density="comfortable"
             color="primary"
-            class="text-mono"
             :rules="[v => !!v || 'Username is required', v => /^[a-zA-Z0-9_-]+$/.test(v) || 'Alphanumeric, underscores, hyphens only']"
             hide-details="auto"
             bg-color="rgba(0, 0, 0, 0.2)"
@@ -89,19 +85,17 @@
 
         <!-- Password Input -->
         <div class="mb-4">
-          <div class="text-caption text-mono font-weight-bold text-primary mb-2 text-uppercase tracking-wider">
+          <div class="text-caption font-weight-bold text-primary mb-2 text-uppercase tracking-wider">
             Master Secure Password
           </div>
           <v-text-field
             v-model="password"
-            placeholder="••••••••"
             prepend-inner-icon="mdi-lock-outline"
             :append-inner-icon="showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
             :type="showPassword ? 'text' : 'password'"
             variant="outlined"
             density="comfortable"
             color="primary"
-            class="text-mono"
             :rules="[v => !!v || 'Password is required']"
             hide-details="auto"
             bg-color="rgba(0, 0, 0, 0.2)"
@@ -113,18 +107,16 @@
 
         <!-- Confirm Password Input -->
         <div class="mb-4">
-          <div class="text-caption text-mono font-weight-bold text-primary mb-2 text-uppercase tracking-wider">
+          <div class="text-caption font-weight-bold text-primary mb-2 text-uppercase tracking-wider">
             Confirm Password
           </div>
           <v-text-field
             v-model="confirmPassword"
-            placeholder="••••••••"
             prepend-inner-icon="mdi-lock-check-outline"
             :type="showPassword ? 'text' : 'password'"
             variant="outlined"
             density="comfortable"
             color="primary"
-            class="text-mono"
             :rules="[v => !!v || 'Please confirm your password']"
             hide-details="auto"
             bg-color="rgba(0, 0, 0, 0.2)"
@@ -135,9 +127,9 @@
 
         <!-- Real-Time Password Checklist -->
         <div class="checklist pa-4 rounded-lg bg-black-opacity mb-6 border-thin">
-          <div class="text-caption text-mono text-grey mb-2 uppercase tracking-wide">Security Policies:</div>
+          <div class="text-caption text-grey mb-2 uppercase tracking-wide">Security Policies:</div>
           
-          <div class="d-flex align-center gap-2 mb-2 text-caption text-mono">
+          <div class="d-flex align-center gap-2 mb-2 text-caption">
             <v-icon size="16" :color="passLengthValid ? 'success' : 'grey'">
               {{ passLengthValid ? 'mdi-check-circle' : 'mdi-circle-outline' }}
             </v-icon>
@@ -146,7 +138,7 @@
             </span>
           </div>
 
-          <div class="d-flex align-center gap-2 text-caption text-mono">
+          <div class="d-flex align-center gap-2 text-caption">
             <v-icon size="16" :color="passwordsMatch ? 'success' : 'grey'">
               {{ passwordsMatch ? 'mdi-check-circle' : 'mdi-circle-outline' }}
             </v-icon>
@@ -161,7 +153,7 @@
           block
           color="primary"
           size="large"
-          class="submit-btn font-weight-bold text-mono tracking-wide mt-2"
+          class="submit-btn font-weight-bold tracking-wide mt-2"
           :loading="loading"
           :disabled="!formValid || !passLengthValid || !passwordsMatch"
           elevation="4"
