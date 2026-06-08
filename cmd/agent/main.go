@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -21,6 +25,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create docker client: %v", err)
 	}
+
+	go startHeartbeat(cli)
 
 	var upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -93,6 +99,26 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(volumes)
+	})
+
+	http.HandleFunc("/volumes/browse", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		path := r.URL.Query().Get("path")
+		if name == "" {
+			http.Error(w, "name is required", http.StatusBadRequest)
+			return
+		}
+		if path == "" {
+			path = "/"
+		}
+
+		entries, err := volMgr.BrowseVolume(r.Context(), name, path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entries)
 	})
 
 	http.HandleFunc("/volumes/prune", func(w http.ResponseWriter, r *http.Request) {
@@ -244,6 +270,100 @@ func main() {
 		docker.DemuxLogs(stream, writer)
 	})
 
+	http.HandleFunc("/containers/stop", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+		if err := contMgr.StopContainer(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/containers/start", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+		if err := contMgr.StartContainer(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/containers/restart", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+		if err := contMgr.RestartContainer(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/containers/remove", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+		force := r.URL.Query().Get("force") == "true"
+		if err := contMgr.RemoveContainer(r.Context(), id, force); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/containers/exec", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+		shell := r.URL.Query().Get("shell")
+		if id == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+		if shell == "" {
+			shell = "/bin/sh"
+		}
+
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Printf("Failed to upgrade agent exec connection: %v", err)
+			return
+		}
+		defer conn.Close()
+
+		err = contMgr.ExecContainerWS(r.Context(), id, shell, conn)
+		if err != nil {
+			log.Printf("Error during container exec WS: %v", err)
+			conn.WriteMessage(websocket.TextMessage, []byte("\r\nError: "+err.Error()+"\r\n"))
+		}
+	})
+
 	http.HandleFunc("/prune", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Received global prune request from %s", r.RemoteAddr)
 		if r.Method != http.MethodPost {
@@ -289,3 +409,100 @@ func (w *wsWriter) Write(p []byte) (n int, err error) {
 	}
 	return len(p), nil
 }
+
+func startHeartbeat(cli *docker.Client) {
+	managerURL := os.Getenv("MANAGER_URL")
+	if managerURL == "" {
+		managerURL = "http://manager:8080"
+	}
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	// Initial heartbeat immediately on startup
+	sendHeartbeat(cli, managerURL)
+
+	for range ticker.C {
+		sendHeartbeat(cli, managerURL)
+	}
+}
+
+func sendHeartbeat(cli *docker.Client, managerURL string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	info, err := cli.Info(ctx)
+	if err != nil {
+		log.Printf("Heartbeat error: failed to get docker info: %v", err)
+		return
+	}
+
+	nodeID := info.Swarm.NodeID
+	if nodeID == "" {
+		log.Printf("Heartbeat error: node is not part of a swarm")
+		return
+	}
+
+	hostname := os.Getenv("NODE_HOSTNAME")
+	if hostname == "" {
+		hostname = info.Name
+	}
+
+	ip, err := getOverlayIP(managerURL)
+	if err != nil {
+		log.Printf("Heartbeat error: failed to determine overlay IP: %v", err)
+		return
+	}
+
+	payload := api.AgentHeartbeat{
+		NodeID:   nodeID,
+		IP:       ip,
+		Hostname: hostname,
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Heartbeat error: failed to marshal payload: %v", err)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, managerURL+"/api/internal/heartbeat", bytes.NewReader(bodyBytes))
+	if err != nil {
+		log.Printf("Heartbeat error: failed to create request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Heartbeat error: failed to push to manager: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Heartbeat error: manager returned status %d", resp.StatusCode)
+	}
+}
+
+func getOverlayIP(managerURL string) (string, error) {
+	hostPort := strings.TrimPrefix(managerURL, "http://")
+	hostPort = strings.TrimPrefix(hostPort, "https://")
+	if i := strings.Index(hostPort, "/"); i != -1 {
+		hostPort = hostPort[:i]
+	}
+
+	conn, err := net.Dial("tcp", hostPort)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().String()
+	if i := strings.LastIndex(localAddr, ":"); i != -1 {
+		return localAddr[:i], nil
+	}
+	return localAddr, nil
+}
+

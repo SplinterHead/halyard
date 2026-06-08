@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/SplinterHead/halyard/api"
+	"github.com/SplinterHead/halyard/internal/pkg/compose"
 )
 
 type GitSyncManager struct {
@@ -92,6 +93,9 @@ func (m *GitSyncManager) AddSync(sync api.GitSync) (api.GitSync, error) {
 					sync.LastError = fmt.Sprintf("Failed to clone for fresh deploy: %v", err)
 				} else {
 					defer cleanup()
+					if err := compose.VersionConfigs(ctx, m.stackMgr.GetDockerClient(), sync.StackName, tmpDir, sync.Path); err != nil {
+						log.Printf("SyncMgr: Failed to version configs: %v", err)
+					}
 					err = m.stackMgr.DeployStack(ctx, sync.StackName, tmpDir, sync.Path, registries)
 					if err != nil {
 						sync.LastStatus = "Failed"
@@ -242,6 +246,9 @@ func (m *GitSyncManager) PerformSync(ctx context.Context, id string, trigger str
 			deployErr = fmt.Errorf("clone failed: %v", err)
 		} else {
 			defer cleanup()
+			if err := compose.VersionConfigs(ctx, m.stackMgr.GetDockerClient(), sync.StackName, tmpDir, sync.Path); err != nil {
+				log.Printf("SyncMgr: Failed to version configs: %v", err)
+			}
 			deployErr = m.stackMgr.DeployStack(ctx, sync.StackName, tmpDir, sync.Path, registries)
 		}
 	} else {

@@ -35,13 +35,15 @@ func main() {
 		log.Fatalf("Failed to initialize session secret: %v", err)
 	}
 
+	agentDir := manager.NewAgentDirectory()
+
 	svcMgr := manager.NewServiceManager(cli)
-	nodeMgr := manager.NewNodeManager(cli, db)
+	nodeMgr := manager.NewNodeManager(cli, db, agentDir)
 	stackMgr := manager.NewStackManager(cli)
-	volAgg := manager.NewVolumeAggregator(cli)
-	netAgg := manager.NewNetworkAggregator(cli)
-	contAgg := manager.NewContainerAggregator(cli)
-	imgAgg := manager.NewImageAggregator(cli)
+	volAgg := manager.NewVolumeAggregator(cli, agentDir)
+	netAgg := manager.NewNetworkAggregator(cli, agentDir)
+	contAgg := manager.NewContainerAggregator(cli, agentDir)
+	imgAgg := manager.NewImageAggregator(cli, agentDir)
 	gitMgr := manager.NewGitManager(db)
 	registryMgr := manager.NewRegistryManager(db)
 	syncMgr := manager.NewGitSyncManager(db, gitMgr, stackMgr, registryMgr)
@@ -56,6 +58,24 @@ func main() {
 	go statsWorker.Start(context.Background())
 
 	// API Endpoints
+	http.HandleFunc("/api/internal/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var hb api.AgentHeartbeat
+		if err := json.NewDecoder(r.Body).Decode(&hb); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if hb.NodeID == "" || hb.IP == "" {
+			http.Error(w, "node_id and ip are required", http.StatusBadRequest)
+			return
+		}
+		agentDir.Update(hb.NodeID, hb.IP, hb.Hostname)
+		w.WriteHeader(http.StatusOK)
+	})
+
 	http.HandleFunc("/api/auth/status", func(w http.ResponseWriter, r *http.Request) {
 		hasUsers, err := db.HasUsers()
 		if err != nil {
@@ -279,6 +299,33 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	http.HandleFunc("/api/nodes/update", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req api.NodeUpdateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if req.ID == "" {
+			http.Error(w, "id is required", http.StatusBadRequest)
+			return
+		}
+
+		err := nodeMgr.UpdateNode(r.Context(), req.ID, req.Availability, req.Role)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+
 	http.HandleFunc("/api/stacks", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			stacks, err := stackMgr.ListStacks(r.Context())
@@ -296,6 +343,74 @@ func main() {
 		if r.Method == http.MethodDelete {
 			name := strings.TrimPrefix(r.URL.Path, "/api/stacks/")
 			err := stackMgr.RemoveStack(r.Context(), name)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	http.HandleFunc("/api/stacks/restart", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			name := r.URL.Query().Get("name")
+			if name == "" {
+				http.Error(w, "name is required", http.StatusBadRequest)
+				return
+			}
+			err := stackMgr.RestartStack(r.Context(), name, svcMgr)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	http.HandleFunc("/api/stacks/stop", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			name := r.URL.Query().Get("name")
+			if name == "" {
+				http.Error(w, "name is required", http.StatusBadRequest)
+				return
+			}
+			err := stackMgr.StopStack(r.Context(), name, svcMgr)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	http.HandleFunc("/api/stacks/start", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			name := r.URL.Query().Get("name")
+			if name == "" {
+				http.Error(w, "name is required", http.StatusBadRequest)
+				return
+			}
+			err := stackMgr.StartStack(r.Context(), name, svcMgr)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	http.HandleFunc("/api/stacks/rollback", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			name := r.URL.Query().Get("name")
+			if name == "" {
+				http.Error(w, "name is required", http.StatusBadRequest)
+				return
+			}
+			err := stackMgr.RollbackStack(r.Context(), name, svcMgr)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -359,6 +474,27 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(volumes)
+	})
+
+	http.HandleFunc("/api/volumes/browse", func(w http.ResponseWriter, r *http.Request) {
+		node := r.URL.Query().Get("node")
+		name := r.URL.Query().Get("name")
+		path := r.URL.Query().Get("path")
+		if node == "" || name == "" {
+			http.Error(w, "node and name are required", http.StatusBadRequest)
+			return
+		}
+		if path == "" {
+			path = "/"
+		}
+
+		entries, err := volAgg.BrowseVolume(r.Context(), node, name, path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entries)
 	})
 
 	http.HandleFunc("/api/volumes/prune", func(w http.ResponseWriter, r *http.Request) {
@@ -438,13 +574,33 @@ func main() {
 	})
 
 	http.HandleFunc("/api/containers", func(w http.ResponseWriter, r *http.Request) {
-		containers, err := contAgg.ListAllContainers(r.Context())
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if r.Method == http.MethodGet {
+			containers, err := contAgg.ListAllContainers(r.Context())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(containers)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(containers)
+
+		if r.Method == http.MethodDelete {
+			id := r.URL.Query().Get("id")
+			node := r.URL.Query().Get("node")
+			force := r.URL.Query().Get("force") == "true"
+			if id == "" || node == "" {
+				http.Error(w, "id and node are required", http.StatusBadRequest)
+				return
+			}
+			err := contAgg.DeleteContainer(r.Context(), id, node, force)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 	})
 
 	http.HandleFunc("/api/images", func(w http.ResponseWriter, r *http.Request) {
@@ -536,6 +692,79 @@ func main() {
 		}
 		if err := contAgg.StreamLogsWS(r.Context(), id, node, w, r); err != nil {
 			log.Printf("Error streaming logs via WS: %v", err)
+		}
+	})
+
+	http.HandleFunc("/api/containers/start", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.URL.Query().Get("id")
+		node := r.URL.Query().Get("node")
+		if id == "" || node == "" {
+			http.Error(w, "id and node are required", http.StatusBadRequest)
+			return
+		}
+		err := contAgg.StartContainer(r.Context(), id, node)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/api/containers/stop", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.URL.Query().Get("id")
+		node := r.URL.Query().Get("node")
+		if id == "" || node == "" {
+			http.Error(w, "id and node are required", http.StatusBadRequest)
+			return
+		}
+		err := contAgg.StopContainer(r.Context(), id, node)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/api/containers/restart", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.URL.Query().Get("id")
+		node := r.URL.Query().Get("node")
+		if id == "" || node == "" {
+			http.Error(w, "id and node are required", http.StatusBadRequest)
+			return
+		}
+		err := contAgg.RestartContainer(r.Context(), id, node)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/api/containers/exec", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+		node := r.URL.Query().Get("node")
+		shell := r.URL.Query().Get("shell")
+		if id == "" || node == "" {
+			http.Error(w, "id and node are required", http.StatusBadRequest)
+			return
+		}
+		if shell == "" {
+			shell = "/bin/sh"
+		}
+		if err := contAgg.ProxyExecWS(r.Context(), id, node, shell, w, r); err != nil {
+			log.Printf("Error execing into container via WS: %v", err)
 		}
 	})
 
@@ -755,6 +984,98 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(services)
+	})
+
+	http.HandleFunc("/api/services/restart", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			id := r.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
+				return
+			}
+			err := svcMgr.RestartService(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	http.HandleFunc("/api/services/stop", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			id := r.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
+				return
+			}
+			err := svcMgr.StopService(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	http.HandleFunc("/api/services/start", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			id := r.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
+				return
+			}
+			err := svcMgr.StartService(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	http.HandleFunc("/api/services/rollback", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			id := r.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
+				return
+			}
+			err := svcMgr.RollbackService(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	http.HandleFunc("/api/services/scale", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			id := r.URL.Query().Get("id")
+			if id == "" {
+				http.Error(w, "id is required", http.StatusBadRequest)
+				return
+			}
+			var req struct {
+				Replicas uint64 `json:"replicas"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			err := svcMgr.ScaleService(r.Context(), id, req.Replicas)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 	})
 
 	http.HandleFunc("/api/secrets", func(w http.ResponseWriter, r *http.Request) {
@@ -1062,7 +1383,8 @@ func AuthMiddleware(db *manager.DB, secret []byte, next http.Handler) http.Handl
 		if !strings.HasPrefix(path, "/api/") ||
 			path == "/api/auth/status" ||
 			path == "/api/auth/login" ||
-			path == "/api/auth/register" {
+			path == "/api/auth/register" ||
+			strings.HasPrefix(path, "/api/internal/") {
 			next.ServeHTTP(w, r)
 			return
 		}

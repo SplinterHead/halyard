@@ -2,12 +2,15 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/gorilla/websocket"
 	"github.com/SplinterHead/halyard/api"
 	"github.com/SplinterHead/halyard/internal/pkg/docker"
 )
@@ -45,6 +48,13 @@ func (m *ContainerManager) ListContainers(ctx context.Context) ([]api.ContainerI
 
 		upToDate := m.checkImageUpToDate(ctx, c.Image, c.ImageID)
 
+		var networks []string
+		if c.NetworkSettings != nil && c.NetworkSettings.Networks != nil {
+			for netName := range c.NetworkSettings.Networks {
+				networks = append(networks, netName)
+			}
+		}
+
 		containers = append(containers, api.ContainerInfo{
 			ID:        c.ID,
 			Names:     c.Names,
@@ -53,6 +63,7 @@ func (m *ContainerManager) ListContainers(ctx context.Context) ([]api.ContainerI
 			Status:    c.Status,
 			Service:   service,
 			Stack:     stack,
+			Networks:  networks,
 			UpToDate:  upToDate,
 			CreatedAt: time.Unix(c.Created, 0),
 		})
@@ -176,4 +187,108 @@ func (m *ContainerManager) StreamLogs(ctx context.Context, id string) (io.ReadCl
 		Tail:       "100",
 		Timestamps: true,
 	})
+}
+
+func (m *ContainerManager) StopContainer(ctx context.Context, id string) error {
+	return m.docker.ContainerStop(ctx, id, container.StopOptions{})
+}
+
+func (m *ContainerManager) StartContainer(ctx context.Context, id string) error {
+	return m.docker.ContainerStart(ctx, id, container.StartOptions{})
+}
+
+func (m *ContainerManager) RestartContainer(ctx context.Context, id string) error {
+	return m.docker.ContainerRestart(ctx, id, container.StopOptions{})
+}
+
+func (m *ContainerManager) RemoveContainer(ctx context.Context, id string, force bool) error {
+	return m.docker.ContainerRemove(ctx, id, container.RemoveOptions{Force: force})
+}
+
+func (m *ContainerManager) ExecContainerWS(ctx context.Context, containerID string, shell string, wsConn *websocket.Conn) error {
+	execConfig := types.ExecConfig{
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          true,
+		Cmd:          []string{shell},
+	}
+
+	execIDResp, err := m.docker.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return err
+	}
+
+	resp, err := m.docker.ContainerExecAttach(ctx, execIDResp.ID, types.ExecStartCheck{
+		Tty: true,
+	})
+	if err != nil {
+		return err
+	}
+	defer resp.Close()
+
+	errChan := make(chan error, 2)
+
+	// Read from container stdout/stderr, write to WebSocket
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := resp.Reader.Read(buf)
+			if n > 0 {
+				if wErr := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); wErr != nil {
+					errChan <- wErr
+					return
+				}
+			}
+			if err != nil {
+				errChan <- err
+				return
+			}
+		}
+	}()
+
+	// Read from WebSocket (stdin & resize), write to container
+	go func() {
+		for {
+			mt, message, err := wsConn.ReadMessage()
+			if err != nil {
+				errChan <- err
+				return
+			}
+			if mt == websocket.TextMessage {
+				var cmd struct {
+					Type string `json:"type"`
+					Data string `json:"data"`
+					Cols uint   `json:"cols"`
+					Rows uint   `json:"rows"`
+				}
+				if json.Unmarshal(message, &cmd) == nil {
+					if cmd.Type == "resize" && cmd.Cols > 0 && cmd.Rows > 0 {
+						m.docker.ContainerExecResize(ctx, execIDResp.ID, container.ResizeOptions{
+							Height: cmd.Rows,
+							Width:  cmd.Cols,
+						})
+						continue
+					} else if cmd.Type == "stdin" {
+						message = []byte(cmd.Data)
+					}
+				}
+			}
+
+			if _, wErr := resp.Conn.Write(message); wErr != nil {
+				errChan <- wErr
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errChan:
+		if err != nil && err != io.EOF && !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			return err
+		}
+		return nil
+	}
 }

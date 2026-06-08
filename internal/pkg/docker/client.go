@@ -54,7 +54,9 @@ func (c *Client) Prune(ctx context.Context, containers, networks, volumes, image
 		}
 	}
 	if volumes {
-		if _, err := c.VolumesPrune(ctx, filters.Args{}); err != nil {
+		args := filters.NewArgs()
+		args.Add("all", "1")
+		if _, err := c.VolumesPrune(ctx, args); err != nil {
 			return err
 		}
 	}

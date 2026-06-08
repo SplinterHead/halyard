@@ -5,26 +5,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/SplinterHead/halyard/api"
+	"github.com/SplinterHead/halyard/internal/pkg/agentclient"
 	"github.com/SplinterHead/halyard/internal/pkg/docker"
 )
 
 type NetworkAggregator struct {
-	docker *docker.Client
-	client *http.Client
+	docker   *docker.Client
+	client   *http.Client
+	agentDir *AgentDirectory
 }
 
-func NewNetworkAggregator(cli *docker.Client) *NetworkAggregator {
+func NewNetworkAggregator(cli *docker.Client, agentDir *AgentDirectory) *NetworkAggregator {
 	return &NetworkAggregator{
-		docker: cli,
-		client: &http.Client{Timeout: 5 * time.Second},
+		docker:   cli,
+		client:   &http.Client{Timeout: 5 * time.Second},
+		agentDir: agentDir,
 	}
 }
 
@@ -39,77 +40,56 @@ func (m *NetworkAggregator) ListAllNetworks(ctx context.Context) ([]api.NetworkI
 		nodeMap[n.ID] = n.Description.Hostname
 	}
 
-	// Get agent tasks to find their IPs
-	agentTasks, err := m.docker.TaskList(ctx, types.TaskListOptions{
-		Filters: filters.NewArgs(filters.Arg("service", "halyard_agent"), filters.Arg("desired-state", "running")),
-	})
-	if err != nil {
-		return nil, err
-	}
+	activeAgents := m.agentDir.GetAllAgents()
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	networkMap := make(map[string]api.NetworkInfo)
 
-	for _, task := range agentTasks {
-		if task.Status.State == "running" && len(task.NetworksAttachments) > 0 {
-			var ip string
-			for _, net := range task.NetworksAttachments {
-				if len(net.Addresses) > 0 {
-					fullIP := net.Addresses[0]
-					if i := strings.Index(fullIP, "/"); i != -1 {
-						ip = fullIP[:i]
-						break
-					}
-				}
+	for _, agent := range activeAgents {
+		wg.Add(1)
+		go func(taskIP, nodeID string) {
+			defer wg.Done()
+			resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/networks", taskIP))
+			if err != nil {
+				return
 			}
+			defer resp.Body.Close()
 
-			if ip != "" {
-				wg.Add(1)
-				go func(taskIP, nodeID string) {
-					defer wg.Done()
-					resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/networks", taskIP))
-					if err != nil {
-						return
-					}
-					defer resp.Body.Close()
+			var nets []api.NetworkInfo
+			if err := json.NewDecoder(resp.Body).Decode(&nets); err == nil {
+				mu.Lock()
+				for _, n := range nets {
+					nodeName := nodeMap[nodeID]
+					key := n.Name
 
-					var nets []api.NetworkInfo
-					if err := json.NewDecoder(resp.Body).Decode(&nets); err == nil {
-						mu.Lock()
-						for _, n := range nets {
-							nodeName := nodeMap[nodeID]
-							key := n.Name
-
-							existing, exists := networkMap[key]
-							if !exists {
-								// First time seeing this network name
-								if n.Scope == "swarm" {
-									n.Node = "Swarm"
-								} else {
-									n.Node = nodeName
-								}
-								networkMap[key] = n
-							} else {
-								// Already seen this network name
-								if n.Scope == "swarm" && existing.Scope != "swarm" {
-									// Upgrade to Swarm scope if found
-									n.Node = "Swarm"
-									networkMap[key] = n
-								} else if n.Scope != "swarm" && existing.Scope != "swarm" {
-									// Both local, mark as Multi-Node if from different nodes
-									if existing.Node != nodeName && existing.Node != "Multi-Node" {
-										existing.Node = "Multi-Node"
-										networkMap[key] = existing
-									}
-								}
+					existing, exists := networkMap[key]
+					if !exists {
+						// First time seeing this network name
+						if n.Scope == "swarm" {
+							n.Node = "Swarm"
+						} else {
+							n.Node = nodeName
+						}
+						networkMap[key] = n
+					} else {
+						// Already seen this network name
+						if n.Scope == "swarm" && existing.Scope != "swarm" {
+							// Upgrade to Swarm scope if found
+							n.Node = "Swarm"
+							networkMap[key] = n
+						} else if n.Scope != "swarm" && existing.Scope != "swarm" {
+							// Both local, mark as Multi-Node if from different nodes
+							if existing.Node != nodeName && existing.Node != "Multi-Node" {
+								existing.Node = "Multi-Node"
+								networkMap[key] = existing
 							}
 						}
-						mu.Unlock()
 					}
-				}(ip, task.NodeID)
+				}
+				mu.Unlock()
 			}
-		}
+		}(agent.IP, agent.NodeID)
 	}
 
 	wg.Wait()
@@ -168,55 +148,41 @@ func (m *NetworkAggregator) GetNetworkDetail(ctx context.Context, id string) (ap
 	}
 
 	// 2. If not found locally, it could be node-local to a worker. Ask agents.
-	agentTasks, err := m.docker.TaskList(ctx, types.TaskListOptions{
-		Filters: filters.NewArgs(filters.Arg("service", "halyard_agent"), filters.Arg("desired-state", "running")),
-	})
-	if err != nil {
-		return api.NetworkDetail{}, err
+	activeAgents := m.agentDir.GetAllAgents()
+	if len(activeAgents) == 0 {
+		return api.NetworkDetail{}, fmt.Errorf("network %s not found (no active agents)", id)
 	}
 
 	type result struct {
 		detail api.NetworkDetail
 		err    error
 	}
-	resChan := make(chan result, len(agentTasks))
+	resChan := make(chan result, len(activeAgents))
 	var wg sync.WaitGroup
 
-	for _, task := range agentTasks {
-		if task.Status.State == "running" && len(task.NetworksAttachments) > 0 {
-			var ip string
-			for _, net := range task.NetworksAttachments {
-				if len(net.Addresses) > 0 {
-					fullIP := net.Addresses[0]
-					if i := strings.Index(fullIP, "/"); i != -1 {
-						ip = fullIP[:i]
-						break
-					}
-				}
+	for _, agent := range activeAgents {
+		wg.Add(1)
+		go func(taskIP string) {
+			defer wg.Done()
+			resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/networks/detail?id=%s", taskIP, id))
+			if err != nil {
+				resChan <- result{err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			if err := agentclient.ParseError(resp, http.StatusOK); err != nil {
+				resChan <- result{err: err}
+				return
 			}
 
-			if ip != "" {
-				wg.Add(1)
-				go func(taskIP string) {
-					defer wg.Done()
-					resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/networks/detail?id=%s", taskIP, id))
-					if err != nil {
-						resChan <- result{err: err}
-						return
-					}
-					defer resp.Body.Close()
-
-					if resp.StatusCode == http.StatusOK {
-						var detail api.NetworkDetail
-						if err := json.NewDecoder(resp.Body).Decode(&detail); err == nil {
-							resChan <- result{detail: detail}
-							return
-						}
-					}
-					resChan <- result{err: fmt.Errorf("status %d", resp.StatusCode)}
-				}(ip)
+			var detail api.NetworkDetail
+			if err := json.NewDecoder(resp.Body).Decode(&detail); err == nil {
+				resChan <- result{detail: detail}
+				return
 			}
-		}
+			resChan <- result{err: fmt.Errorf("failed to decode detail")}
+		}(agent.IP)
 	}
 
 	// Wait in a separate goroutine and close channel

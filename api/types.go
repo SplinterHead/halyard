@@ -109,6 +109,7 @@ type ContainerInfo struct {
 	Node      string    `json:"node"`
 	Service   string    `json:"service"`
 	Stack     string    `json:"stack"`
+	Networks  []string  `json:"networks"`
 	UpToDate  bool      `json:"up_to_date"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -140,6 +141,16 @@ type FileEntry struct {
 	Name  string `json:"name"`
 	Path  string `json:"path"`
 	IsDir bool   `json:"is_dir"`
+}
+
+type VolumeFileEntry struct {
+	Name       string    `json:"name"`
+	Path       string    `json:"path"`
+	IsDir      bool      `json:"is_dir"`
+	Size       int64     `json:"size"`
+	ModifiedAt time.Time `json:"modified_at"`
+	CreatedAt  time.Time `json:"created_at"`
+	Permission string    `json:"permissions"`
 }
 
 // GitRepository represents a git repository source for Halyard
@@ -286,6 +297,14 @@ type PruneRequest struct {
 	ImagesAll  bool `json:"images_all"`
 }
 
+// NodeUpdateRequest represents the request payload to update a swarm node's spec (role, availability)
+type NodeUpdateRequest struct {
+	ID           string `json:"id"`
+	Availability string `json:"availability,omitempty"` // "active", "pause", "drain"
+	Role         string `json:"role,omitempty"`         // "manager", "worker"
+}
+
+
 // DockerHubRateLimit represents Docker Hub pull rate limit headers
 type DockerHubRateLimit struct {
 	Limit     int `json:"limit"`
@@ -319,4 +338,12 @@ type AuthResponse struct {
 	Token string `json:"token"`
 	User  User   `json:"user"`
 }
+
+// AgentHeartbeat represents the heartbeat payload pushed by agents
+type AgentHeartbeat struct {
+	NodeID   string `json:"node_id"`
+	IP       string `json:"ip"`
+	Hostname string `json:"hostname"`
+}
+
 

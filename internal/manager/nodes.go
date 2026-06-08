@@ -11,24 +11,26 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/gorilla/websocket"
 	"github.com/SplinterHead/halyard/api"
+	"github.com/SplinterHead/halyard/internal/pkg/agentclient"
 	"github.com/SplinterHead/halyard/internal/pkg/docker"
 )
 
 type NodeManager struct {
-	docker *docker.Client
-	client *http.Client
-	db     *DB
+	docker   *docker.Client
+	client   *http.Client
+	db       *DB
+	agentDir *AgentDirectory
 }
 
-func NewNodeManager(cli *docker.Client, db *DB) *NodeManager {
+func NewNodeManager(cli *docker.Client, db *DB, agentDir *AgentDirectory) *NodeManager {
 	return &NodeManager{
-		docker: cli,
-		client: &http.Client{Timeout: 2 * time.Second},
-		db:     db,
+		docker:   cli,
+		client:   &http.Client{Timeout: 2 * time.Second},
+		db:       db,
+		agentDir: agentDir,
 	}
 }
 
@@ -40,39 +42,6 @@ func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
 		return nil, err
 	}
 	log.Printf("Found %d nodes in swarm", len(nodes))
-
-	// Get agent tasks to find their IPs
-	log.Println("Listing agent tasks...")
-	agentTasks, err := m.docker.TaskList(ctx, types.TaskListOptions{
-		Filters: filters.NewArgs(filters.Arg("service", "halyard_agent"), filters.Arg("desired-state", "running")),
-	})
-	if err != nil {
-		log.Printf("Error listing agent tasks: %v", err)
-		return nil, err
-	}
-	log.Printf("Found %d agent tasks", len(agentTasks))
-
-	// Map NodeID -> Task IP
-	nodeToIP := make(map[string]string)
-	for _, task := range agentTasks {
-		if task.Status.State == "running" && len(task.NetworksAttachments) > 0 {
-			log.Printf("Processing task %s on node %s", task.ID, task.NodeID)
-			// Find the IP on the halyard_default network
-			for _, net := range task.NetworksAttachments {
-				if len(net.Addresses) > 0 {
-					ip := net.Addresses[0]
-					for i := range ip {
-						if ip[i] == '/' {
-							cleanIP := ip[:i]
-							nodeToIP[task.NodeID] = cleanIP
-							log.Printf("Mapped node %s to agent IP %s", task.NodeID, cleanIP)
-							break
-						}
-					}
-				}
-			}
-		}
-	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -93,7 +62,7 @@ func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
 				IP:           n.Status.Addr,
 			}
 
-			if ip, ok := nodeToIP[n.ID]; ok {
+			if ip, ok := m.agentDir.GetAgentIP(n.ID); ok {
 				// Fetch real stats from agent
 				url := fmt.Sprintf("http://%s:9090/stats", ip)
 				log.Printf("Fetching stats from agent at %s", url)
@@ -114,7 +83,7 @@ func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
 					}
 				}
 			} else {
-				log.Printf("No agent IP found for node %s", n.ID)
+				log.Printf("No agent IP found for node %s in AgentDirectory", n.ID)
 			}
 
 			mu.Lock()
@@ -137,34 +106,13 @@ func (m *NodeManager) StreamStatsWS(ctx context.Context, w http.ResponseWriter, 
 	}
 	defer clientConn.Close()
 
-	// Get agent tasks to find their IPs
-	agentTasks, err := m.docker.TaskList(ctx, types.TaskListOptions{
-		Filters: filters.NewArgs(filters.Arg("service", "halyard_agent"), filters.Arg("desired-state", "running")),
-	})
-	if err != nil {
-		return err
-	}
-
-	// Map Task IP -> NodeID for injection
-	ipToNodeID := make(map[string]string)
-	for _, task := range agentTasks {
-		if task.Status.State == "running" && len(task.NetworksAttachments) > 0 {
-			for _, net := range task.NetworksAttachments {
-				if len(net.Addresses) > 0 {
-					ip := net.Addresses[0]
-					if i := strings.Index(ip, "/"); i != -1 {
-						ipToNodeID[ip[:i]] = task.NodeID
-						break
-					}
-				}
-			}
-		}
-	}
+	// Get active agents from directory
+	activeAgents := m.agentDir.GetAllAgents()
 
 	errChan := make(chan error, 1)
 	mu := sync.Mutex{}
 
-	for ip, nodeID := range ipToNodeID {
+	for _, agent := range activeAgents {
 		go func(agentIP, id string) {
 			agentURL := fmt.Sprintf("ws://%s:9090/stats/stream", agentIP)
 			agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, nil)
@@ -193,7 +141,7 @@ func (m *NodeManager) StreamStatsWS(ctx context.Context, w http.ResponseWriter, 
 				}
 				mu.Unlock()
 			}
-		}(ip, nodeID)
+		}(agent.IP, agent.NodeID)
 	}
 
 	select {
@@ -253,26 +201,10 @@ func (m *NodeManager) GetNodeDetail(ctx context.Context, id string) (api.NodeDet
 }
 
 func (m *NodeManager) getAgentIPForNode(ctx context.Context, nodeID string) (string, error) {
-	agentTasks, err := m.docker.TaskList(ctx, types.TaskListOptions{
-		Filters: filters.NewArgs(filters.Arg("service", "halyard_agent"), filters.Arg("desired-state", "running")),
-	})
-	if err != nil {
-		return "", err
+	if ip, ok := m.agentDir.GetAgentIP(nodeID); ok {
+		return ip, nil
 	}
-
-	for _, task := range agentTasks {
-		if task.NodeID == nodeID && task.Status.State == "running" && len(task.NetworksAttachments) > 0 {
-			for _, net := range task.NetworksAttachments {
-				if len(net.Addresses) > 0 {
-					ip := net.Addresses[0]
-					if i := strings.Index(ip, "/"); i != -1 {
-						return ip[:i], nil
-					}
-				}
-			}
-		}
-	}
-	return "", fmt.Errorf("agent not found on node %s", nodeID)
+	return "", fmt.Errorf("agent not found on node %s in AgentDirectory", nodeID)
 }
 
 func (m *NodeManager) AddNodeLabel(ctx context.Context, id, key, value string) error {
@@ -305,6 +237,33 @@ func (m *NodeManager) RemoveNodeLabel(ctx context.Context, id, key string) error
 	return m.docker.NodeUpdate(ctx, id, node.Version, spec)
 }
 
+func (m *NodeManager) UpdateNode(ctx context.Context, id string, availability string, role string) error {
+	node, _, err := m.docker.NodeInspectWithRaw(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	spec := node.Spec
+	updated := false
+
+	if availability != "" {
+		spec.Availability = swarm.NodeAvailability(availability)
+		updated = true
+	}
+
+	if role != "" {
+		spec.Role = swarm.NodeRole(role)
+		updated = true
+	}
+
+	if !updated {
+		return nil
+	}
+
+	return m.docker.NodeUpdate(ctx, id, node.Version, spec)
+}
+
+
 func (m *NodeManager) PruneCluster(ctx context.Context, req api.PruneRequest) error {
 	log.Println("Starting cluster-wide prune with custom options...")
 	
@@ -314,28 +273,8 @@ func (m *NodeManager) PruneCluster(ctx context.Context, req api.PruneRequest) er
 		// Continue to agents anyway
 	}
 
-	// 2. Get agent IPs
-	agentTasks, err := m.docker.TaskList(ctx, types.TaskListOptions{
-		Filters: filters.NewArgs(filters.Arg("service", "halyard_agent"), filters.Arg("desired-state", "running")),
-	})
-	if err != nil {
-		return err
-	}
-
-	agentIPs := make([]string, 0)
-	for _, task := range agentTasks {
-		if task.Status.State == "running" && len(task.NetworksAttachments) > 0 {
-			for _, net := range task.NetworksAttachments {
-				if len(net.Addresses) > 0 {
-					ip := net.Addresses[0]
-					if i := strings.Index(ip, "/"); i != -1 {
-						agentIPs = append(agentIPs, ip[:i])
-						break
-					}
-				}
-			}
-		}
-	}
+	// 2. Get active agents from directory
+	activeAgents := m.agentDir.GetAllAgents()
 
 	// 3. Serialize options to JSON for the agents
 	bodyBytes, err := json.Marshal(req)
@@ -346,7 +285,7 @@ func (m *NodeManager) PruneCluster(ctx context.Context, req api.PruneRequest) er
 
 	// 4. Prune all agents concurrently
 	var wg sync.WaitGroup
-	for _, ip := range agentIPs {
+	for _, agent := range activeAgents {
 		wg.Add(1)
 		go func(agentIP string) {
 			defer wg.Done()
@@ -358,10 +297,10 @@ func (m *NodeManager) PruneCluster(ctx context.Context, req api.PruneRequest) er
 				return
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusNoContent {
-				log.Printf("Agent %s returned unexpected status: %d", agentIP, resp.StatusCode)
+			if err := agentclient.ParseError(resp, http.StatusNoContent); err != nil {
+				log.Printf("Agent %s prune error: %v", agentIP, err)
 			}
-		}(ip)
+		}(agent.IP)
 	}
 
 	wg.Wait()

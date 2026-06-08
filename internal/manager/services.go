@@ -147,3 +147,99 @@ func (m *ServiceManager) RemoveService(ctx context.Context, id string) error {
 	return m.docker.ServiceRemove(ctx, id)
 }
 
+func (m *ServiceManager) RestartService(ctx context.Context, id string) error {
+	service, _, err := m.docker.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+	if err != nil {
+		return err
+	}
+	
+	// Increment ForceUpdate to trigger a rolling restart
+	service.Spec.TaskTemplate.ForceUpdate++
+
+	// QueryRegistry: true forces pulling the latest image tag
+	_, err = m.docker.ServiceUpdate(ctx, id, service.Version, service.Spec, types.ServiceUpdateOptions{})
+	return err
+}
+
+func (m *ServiceManager) RollbackService(ctx context.Context, id string) error {
+	service, _, err := m.docker.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+	if err != nil {
+		return err
+	}
+	
+	_, err = m.docker.ServiceUpdate(ctx, id, service.Version, service.Spec, types.ServiceUpdateOptions{Rollback: "previous"})
+	return err
+}
+
+func (m *ServiceManager) StopService(ctx context.Context, id string) error {
+	service, _, err := m.docker.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+	if err != nil {
+		return err
+	}
+	
+	if service.Spec.Mode.Replicated == nil || service.Spec.Mode.Replicated.Replicas == nil {
+		return fmt.Errorf("can only stop replicated services")
+	}
+
+	currentReplicas := *service.Spec.Mode.Replicated.Replicas
+	if currentReplicas == 0 {
+		return nil // Already stopped
+	}
+
+	if service.Spec.Labels == nil {
+		service.Spec.Labels = make(map[string]string)
+	}
+	service.Spec.Labels["halyard.previous_replicas"] = fmt.Sprintf("%d", currentReplicas)
+	
+	zero := uint64(0)
+	service.Spec.Mode.Replicated.Replicas = &zero
+
+	_, err = m.docker.ServiceUpdate(ctx, id, service.Version, service.Spec, types.ServiceUpdateOptions{})
+	return err
+}
+
+func (m *ServiceManager) StartService(ctx context.Context, id string) error {
+	service, _, err := m.docker.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+	if err != nil {
+		return err
+	}
+	
+	if service.Spec.Mode.Replicated == nil || service.Spec.Mode.Replicated.Replicas == nil {
+		return fmt.Errorf("can only start replicated services")
+	}
+
+	if *service.Spec.Mode.Replicated.Replicas > 0 {
+		return nil // Already started
+	}
+
+	prevStr := service.Spec.Labels["halyard.previous_replicas"]
+	replicas := uint64(1) // Default if no label
+	if prevStr != "" {
+		fmt.Sscanf(prevStr, "%d", &replicas)
+		if replicas == 0 {
+			replicas = 1
+		}
+	}
+
+	service.Spec.Mode.Replicated.Replicas = &replicas
+
+	_, err = m.docker.ServiceUpdate(ctx, id, service.Version, service.Spec, types.ServiceUpdateOptions{})
+	return err
+}
+
+func (m *ServiceManager) ScaleService(ctx context.Context, id string, replicas uint64) error {
+	service, _, err := m.docker.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+	if err != nil {
+		return err
+	}
+	
+	if service.Spec.Mode.Replicated == nil {
+		return fmt.Errorf("can only scale replicated services")
+	}
+
+	service.Spec.Mode.Replicated.Replicas = &replicas
+
+	_, err = m.docker.ServiceUpdate(ctx, id, service.Version, service.Spec, types.ServiceUpdateOptions{})
+	return err
+}
+
