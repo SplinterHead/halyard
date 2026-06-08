@@ -219,8 +219,12 @@ code, pre, .font-mono, .text-mono {
   border-left-color: #94a3b8 !important;
 }
 
-.v-data-table-row:hover {
-  background-color: rgba(255, 255, 255, 0.03) !important;
+.v-data-table tbody tr {
+  transition: background-color 0.15s ease !important;
+}
+
+.v-data-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Pulse Glow Animation */
@@ -282,13 +286,13 @@ code, pre, .font-mono, .text-mono {
   border-color: rgba(139, 92, 246, 0.4) !important;
 }
 
-/* Force all action and refresh buttons to be exactly 36px tall and 36px wide */
+/* Force all action and refresh buttons to be exactly 32px tall and 32px wide */
 .refresh-btn,
 .v-data-table td .v-btn {
-  height: 36px !important;
-  width: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
+  height: 32px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
   padding: 0 !important;
   border-radius: 8px !important;
   display: inline-flex !important;
@@ -296,10 +300,74 @@ code, pre, .font-mono, .text-mono {
   justify-content: center !important;
 }
 
-/* Ensure the icons inside refresh and action buttons are scaled beautifully to fit the 36px size */
+/* Standardize all other header action buttons (Add, Prune, Check All, etc.) to 32px height */
+.d-flex.align-center.gap-4 .v-btn:not(.refresh-btn):not(.v-btn-toggle .v-btn),
+.home-dashboard .d-flex.align-center.gap-4 .v-btn:not(.refresh-btn),
+.pa-2.pb-0.d-flex.align-center .v-btn:not(.refresh-btn):not(.v-btn-toggle .v-btn),
+.pa-2.pb-0.d-flex.align-center.flex-wrap.justify-space-between .v-btn:not(.refresh-btn):not(.v-btn-toggle .v-btn) {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-size: 13px !important;
+  border-radius: 8px !important;
+}
+
+/* Ensure the icons inside refresh and action buttons are scaled beautifully to fit the 32px size */
 .refresh-btn .v-icon,
 .v-data-table td .v-btn .v-icon {
+  font-size: 16px !important;
+}
+
+/* Glass Inputs & Controls for Search/Filters - standardize to exactly 32px height */
+.glass-input.v-text-field {
+  height: 32px !important;
+}
+
+.glass-input .v-field {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 12px !important;
+  transition: border-color 0.2s ease;
+  height: 32px !important;
+  min-height: 32px !important;
+}
+
+.glass-input .v-field__input {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  align-items: center !important;
+  font-size: 14px !important;
+}
+
+.glass-input .v-field__field {
+  height: 32px !important;
+  min-height: 32px !important;
+}
+
+/* Ensure prepended icon inside 32px glass-input is centered perfectly */
+.glass-input .v-field__prepend-inner {
+  align-items: center !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  height: 32px !important;
+}
+
+.glass-input .v-field__prepend-inner .v-icon {
   font-size: 18px !important;
 }
+
+.glass-input .v-field--focused {
+  border-color: rgba(var(--v-theme-primary), 0.5) !important;
+}
+
+/* Custom Spacing / Flex Utility for Filter Rows */
+.gap-4 {
+  gap: 16px !important;
+}
+
 
 
