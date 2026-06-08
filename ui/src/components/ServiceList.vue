@@ -1,25 +1,36 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Swarm Services</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchServices"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search services..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchServices"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
     
-    <v-row v-if="loading" justify="center" class="mt-8">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </v-row>
+    <Loader :loading="loading" />
 
-    <v-row v-else-if="services.length === 0" justify="center" class="mt-8">
+    <v-row v-if="services.length === 0 && !loading" justify="center" class="mt-8">
       <v-col cols="12" md="6" class="text-center">
         <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-server-off</v-icon>
         <h3 class="text-h5 text-grey-darken-1">No services found</h3>
@@ -33,7 +44,7 @@
       <v-data-table
         :headers="headers"
         :items="services"
-        :loading="loading"
+        :search="searchQuery"
         :row-props="getRowProps"
         class="bg-transparent clickable-rows"
         hover
@@ -165,6 +176,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import Loader from "./Loader.vue";
+
+const searchQuery = ref("");
 import { useRouter } from "vue-router";
 import RelativeTime from "./RelativeTime.vue";
 

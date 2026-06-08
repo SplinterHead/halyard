@@ -14,6 +14,16 @@ const routes = [
     component: () => import("../views/swarm/NodesView.vue"),
   },
   {
+    path: "/swarm/visualizer",
+    name: "visualizer",
+    component: () => import("../views/swarm/VisualizerView.vue"),
+  },
+  {
+    path: "/swarm/network-visualizer",
+    name: "network-visualizer",
+    component: () => import("../views/swarm/NetworkVisualizerView.vue"),
+  },
+  {
     path: "/swarm/nodes/:id",
     name: "node-detail",
     component: () => import("../views/swarm/NodeDetailView.vue"),
@@ -115,20 +125,27 @@ const router = createRouter({
   routes,
 });
 
+let cachedHasUsers: boolean | null = null;
+
 router.beforeEach(async (to, from, next) => {
   // Check auth status
   let hasUsers = false;
-  try {
-    const res = await fetch("/api/auth/status");
-    const data = await res.json();
-    hasUsers = data.has_users;
-  } catch (e) {
-    console.error("Failed to fetch auth status", e);
-    // If the network request fails, proceed carefully.
-    // If we have a local token we can still try to let them through.
-    const token = localStorage.getItem("halyard_token");
-    if (token) {
-      return next();
+  if (cachedHasUsers !== null) {
+    hasUsers = cachedHasUsers;
+  } else {
+    try {
+      const res = await fetch("/api/auth/status");
+      const data = await res.json();
+      hasUsers = data.has_users;
+      cachedHasUsers = hasUsers;
+    } catch (e) {
+      console.error("Failed to fetch auth status", e);
+      // If the network request fails, proceed carefully.
+      // If we have a local token we can still try to let them through.
+      const token = localStorage.getItem("halyard_token");
+      if (token) {
+        return next();
+      }
     }
   }
 

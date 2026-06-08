@@ -35,6 +35,8 @@
         
         <v-list-item prepend-icon="mdi-layers-outline" title="Stacks" to="/swarm/stacks" value="stacks" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-monitor-dashboard" title="Nodes" to="/swarm/nodes" value="nodes" rounded="lg"></v-list-item>
+        <v-list-item prepend-icon="mdi-sitemap-outline" title="Visualizer" to="/swarm/visualizer" value="visualizer" rounded="lg"></v-list-item>
+        <v-list-item prepend-icon="mdi-lan-connect" title="Network Topology" to="/swarm/network-visualizer" value="network-visualizer" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-server-network" title="Services" to="/swarm/services" value="services" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-database-outline" title="Volumes" to="/swarm/volumes" value="volumes" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-docker" title="Containers" to="/swarm/containers" value="containers" rounded="lg"></v-list-item>
@@ -92,9 +94,11 @@
 
     <v-main class="bg-transparent">
       <v-container fluid :class="isAuthPage ? 'pa-0 fill-height justify-center align-center d-flex' : 'pa-6'">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <v-fade-transition mode="out-in">
-            <component :is="Component" />
+            <div :key="route.path" class="w-100 h-100 d-flex flex-column">
+              <component :is="Component" />
+            </div>
           </v-fade-transition>
         </router-view>
       </v-container>
