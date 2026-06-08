@@ -1,34 +1,44 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Swarm Networks</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        prepend-icon="mdi-plus"
-        color="primary"
-        flat
-        class="me-2"
-        @click="dialog = true"
-      >
-        Create Network
-      </v-btn>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchNetworks"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search networks..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          prepend-icon="mdi-plus"
+          color="primary"
+          flat
+          @click="dialog = true"
+        >
+          Create Network
+        </v-btn>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchNetworks"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
 
-    <v-row v-if="loading" justify="center" class="mt-8">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </v-row>
+    <Loader :loading="loading" />
 
-    <div v-else-if="networks.length === 0" class="flex-grow-1 d-flex flex-column align-center justify-center">
+    <div v-if="networks.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
       <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-lan-pending</v-icon>
       <h3 class="text-h5 text-grey-darken-1">No Networks Found</h3>
       <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
@@ -40,7 +50,7 @@
       <v-data-table
         :headers="headers"
         :items="networks"
-        :loading="loading"
+        :search="searchQuery"
         :sort-by="[{ key: 'name', order: 'asc' }]"
         :row-props="getRowProps"
         class="bg-transparent"
@@ -71,12 +81,12 @@
         </template>
 
         <template v-slot:item.subnet="{ value }">
-          <code class="text-caption" v-if="value">{{ value }}</code>
+          <code class="font-mono text-caption" v-if="value">{{ value }}</code>
           <span v-else class="text-caption text-grey-lighten-1">-</span>
         </template>
 
         <template v-slot:item.gateway="{ value }">
-          <code class="text-caption" v-if="value">{{ value }}</code>
+          <code class="font-mono text-caption" v-if="value">{{ value }}</code>
           <span v-else class="text-caption text-grey-lighten-1">-</span>
         </template>
 
@@ -246,6 +256,9 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import RelativeTime from '../../components/RelativeTime.vue'
+import Loader from '../../components/Loader.vue'
+
+const searchQuery = ref('')
 
 interface Network {
   id: string

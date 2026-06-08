@@ -1,30 +1,44 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Cluster Images</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        prepend-icon="mdi-layers-search-outline"
-        @click="checkAllImages"
-        :loading="checkingAll"
-        variant="tonal"
-        color="primary"
-        class="me-2"
-        size="small"
-      >
-        Check All Updates
-      </v-btn>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchImages"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search images..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          prepend-icon="mdi-layers-search-outline"
+          @click="checkAllImages"
+          :loading="checkingAll"
+          variant="tonal"
+          color="primary"
+          size="small"
+        >
+          Check All Updates
+        </v-btn>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchImages"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
+
+    <Loader :loading="loading" />
 
     <!-- Data Table -->
     <div v-if="images.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
@@ -39,7 +53,7 @@
       <v-data-table
         :headers="headers"
         :items="images"
-        :loading="loading"
+        :search="searchQuery"
         :row-props="getRowProps"
         item-value="ui_key"
         class="bg-transparent"
@@ -176,6 +190,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import Loader from '../../components/Loader.vue'
+
+const searchQuery = ref('')
 
 interface ImageInfo {
   id: string

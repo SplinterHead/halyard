@@ -1,14 +1,14 @@
 <template>
   <div class="fill-height d-flex flex-column pa-4">
     <!-- Header -->
-    <div class="d-flex align-center mb-6" v-if="network">
+    <div class="d-flex align-center mb-6">
       <v-btn
         icon="mdi-arrow-left"
         variant="text"
         @click="$router.back()"
         class="me-2"
       ></v-btn>
-      <div>
+      <div v-if="network">
         <h1 class="text-h4 font-weight-bold d-flex align-center">
           Network: {{ network.name }}
           <v-chip
@@ -24,6 +24,9 @@
           {{ network.scope }} scope // {{ network.id.substring(0, 12) }}
         </p>
       </div>
+      <div v-else>
+        <h1 class="text-h4 font-weight-bold">Network Detail</h1>
+      </div>
       <v-spacer></v-spacer>
       <v-btn
         icon="mdi-refresh"
@@ -34,6 +37,8 @@
         flat
       ></v-btn>
     </div>
+
+    <Loader :loading="loading" />
 
     <v-row v-if="network">
       <!-- Info Cards -->
@@ -101,17 +106,33 @@
       <!-- Connected Containers -->
       <v-col cols="12">
         <v-card class="glass-card">
-          <v-card-title class="pa-6 pb-2 d-flex align-center">
-            <v-icon size="20" class="me-2">mdi-cube-outline</v-icon>
-            <span class="font-weight-bold">Connected Containers</span>
-            <v-spacer></v-spacer>
-            <v-chip size="small" variant="tonal">{{ network.containers?.length || 0 }} Containers</v-chip>
+          <v-card-title class="pa-6 pb-2 d-flex align-center flex-wrap justify-space-between">
+            <div class="d-flex align-center">
+              <v-icon size="20" class="me-2">mdi-cube-outline</v-icon>
+              <span class="font-weight-bold">Connected Containers</span>
+            </div>
+            <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+              <v-text-field
+                v-model="searchQuery"
+                prepend-inner-icon="mdi-magnify"
+                placeholder="Search containers..."
+                variant="solo-filled"
+                density="compact"
+                flat
+                hide-details
+                rounded="lg"
+                class="search-input glass-input"
+                style="width: 240px"
+              ></v-text-field>
+              <v-chip size="small" variant="tonal">{{ network.containers?.length || 0 }} Containers</v-chip>
+            </div>
           </v-card-title>
           
           <v-card-text class="pa-0">
             <v-data-table
               :headers="containerHeaders"
               :items="network.containers || []"
+              :search="searchQuery"
               class="bg-transparent"
               density="comfortable"
               hover
@@ -135,16 +156,15 @@
         </v-card>
       </v-col>
     </v-row>
-
-    <div v-if="loading && !network" class="fill-height d-flex align-center justify-center">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import Loader from '../../components/Loader.vue'
+
+const searchQuery = ref('')
 
 const route = useRoute()
 const router = useRouter()

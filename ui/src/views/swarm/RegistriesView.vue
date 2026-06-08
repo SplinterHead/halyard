@@ -15,6 +15,8 @@
 
     <v-divider class="my-4"></v-divider>
 
+    <Loader :loading="loading" />
+
     <!-- Dynamic Docker Hub rate limit indicator for anonymous usage -->
     <v-alert
       v-if="dockerHubLimit && !hasDockerHubCredential"
@@ -48,11 +50,7 @@
       </div>
     </v-alert>
 
-    <v-row v-if="loading" justify="center" class="mt-8">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </v-row>
-
-    <div v-else-if="registries.length === 0" class="flex-grow-1 d-flex flex-column align-center justify-center py-12">
+    <div v-if="registries.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center py-12">
       <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-database-lock</v-icon>
       <h3 class="text-h5 text-grey-darken-1">No Registries Configured</h3>
       <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
@@ -242,6 +240,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import Loader from '../../components/Loader.vue'
 
 interface Registry {
   id?: string

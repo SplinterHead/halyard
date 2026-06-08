@@ -1,34 +1,44 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Git Syncs</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        prepend-icon="mdi-sync"
-        color="primary"
-        @click="openAddDialog"
-        flat
-        class="me-2"
-      >
-        Add Git Sync
-      </v-btn>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchSyncs"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search syncs..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          prepend-icon="mdi-sync"
+          color="primary"
+          @click="openAddDialog"
+          flat
+        >
+          Add Git Sync
+        </v-btn>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchSyncs"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
 
-    <v-row v-if="loading" justify="center" class="mt-8">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </v-row>
+    <Loader :loading="loading" />
 
-    <div v-else-if="syncs.length === 0" class="flex-grow-1 d-flex flex-column align-center justify-center">
+    <div v-if="syncs.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
       <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-sync-off</v-icon>
       <h3 class="text-h5 text-grey-darken-1">No Git Syncs Found</h3>
       <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
@@ -40,7 +50,7 @@
       <v-data-table
         :headers="headers"
         :items="syncs"
-        :loading="loading"
+        :search="searchQuery"
         :sort-by="[{ key: 'name', order: 'asc' }]"
         :row-props="getRowProps"
         class="bg-transparent"
@@ -66,7 +76,7 @@
                 >mdi-source-branch</v-icon
               >
               <code
-                class="text-caption text-grey"
+                class="font-mono text-caption text-grey"
                 style="background: transparent"
                 >{{ item.branch }}</code
               >
@@ -356,9 +366,9 @@
         </v-card-title>
         <v-divider></v-divider>
         <v-card-text class="pa-0" style="max-height: 450px; overflow-y: auto;">
-          <div v-if="loadingFiles" class="pa-8 text-center">
-            <v-progress-circular indeterminate color="primary"></v-progress-circular>
-            <div class="text-caption mt-2 text-grey">Reading repository...</div>
+          <div v-if="loadingFiles" class="pa-8 d-flex flex-column align-center">
+            <v-progress-linear indeterminate color="primary" style="width: 200px; border-radius: 4px;" class="mb-4"></v-progress-linear>
+            <div class="text-caption text-grey">Reading repository...</div>
           </div>
           <v-list v-else density="compact" nav class="bg-transparent">
             <v-list-item v-if="currentPath !== ''" @click="goUp" prepend-icon="mdi-folder-upload-outline">
@@ -398,7 +408,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import Loader from "../../components/Loader.vue";
 import RelativeTime from "../../components/RelativeTime.vue";
+
+const searchQuery = ref("");
 
 interface GitRepo {
   id: string;
@@ -446,8 +459,8 @@ const editedSync = ref<GitSync>({
   stack_name: "",
   branch: "",
   path: "compose.yml",
-  pull_additional_files: false,
-  auto_sync: false,
+  pull_additional_files: true,
+  auto_sync: true,
   last_applied_sha: "",
   last_sync_at: null,
   last_status: "Ready",
@@ -589,8 +602,8 @@ const resetEditedSync = () => {
     stack_name: "",
     branch: "",
     path: "compose.yml",
-    pull_additional_files: false,
-    auto_sync: false,
+    pull_additional_files: true,
+    auto_sync: true,
     last_applied_sha: "",
     last_sync_at: null,
     last_status: "Ready",

@@ -1,14 +1,14 @@
 <template>
   <div class="fill-height d-flex flex-column pa-4">
     <!-- Header -->
-    <div class="d-flex align-center mb-6" v-if="container">
+    <div class="d-flex align-center mb-6">
       <v-btn
         icon="mdi-arrow-left"
         variant="text"
         @click="$router.back()"
         class="me-2"
       ></v-btn>
-      <div>
+      <div v-if="container">
         <h1 class="text-h4 font-weight-bold d-flex align-center">
           {{ formatName(container.names) }}
           <v-chip
@@ -24,7 +24,47 @@
           {{ container.id.substring(0, 12) }}
         </p>
       </div>
+      <div v-else>
+        <h1 class="text-h4 font-weight-bold">Container Detail</h1>
+      </div>
       <v-spacer></v-spacer>
+      <div v-if="container" class="d-flex align-center gap-2 me-4">
+        <v-btn
+          v-if="container.state.toLowerCase() === 'running'"
+          prepend-icon="mdi-stop"
+          color="warning"
+          variant="tonal"
+          @click="confirmStop"
+          :loading="stopping"
+          class="rounded-lg font-weight-bold"
+        >Stop</v-btn>
+        <v-btn
+          v-if="container.state.toLowerCase() !== 'running'"
+          prepend-icon="mdi-play"
+          color="success"
+          variant="tonal"
+          @click="startContainer"
+          :loading="starting"
+          class="rounded-lg font-weight-bold"
+        >Start</v-btn>
+        <v-btn
+          v-if="container.state.toLowerCase() === 'running'"
+          prepend-icon="mdi-restart"
+          color="info"
+          variant="tonal"
+          @click="confirmRestart"
+          :loading="restarting"
+          class="rounded-lg font-weight-bold"
+        >Restart</v-btn>
+        <v-btn
+          prepend-icon="mdi-delete"
+          color="error"
+          variant="tonal"
+          @click="confirmDelete"
+          :loading="deleting"
+          class="rounded-lg font-weight-bold"
+        >Delete</v-btn>
+      </div>
       <v-btn
         icon="mdi-refresh"
         @click="fetchDetails"
@@ -35,11 +75,14 @@
       ></v-btn>
     </div>
 
+    <Loader :loading="loading" />
+
     <v-tabs v-model="tab" color="primary" class="mb-6 border-b">
       <v-tab value="overview" prepend-icon="mdi-view-dashboard-outline"
         >Overview</v-tab
       >
-      <v-tab value="logs" prepend-icon="mdi-console">Logs</v-tab>
+      <v-tab value="logs" prepend-icon="mdi-text-box-outline">Logs</v-tab>
+      <v-tab value="terminal" prepend-icon="mdi-console">Terminal</v-tab>
     </v-tabs>
 
     <v-window v-model="tab" class="flex-grow-1">
@@ -269,11 +312,11 @@
       <!-- Logs Tab -->
       <v-window-item value="logs">
         <v-card
-          class="glass-card rounded-xl fill-height d-flex flex-column"
+          class="glass-card no-hover-card rounded-xl fill-height d-flex flex-column"
           style="height: calc(100vh - 280px)"
         >
           <v-card-title class="pa-4 pb-2 d-flex align-center">
-            <v-icon size="20" class="me-2">mdi-console</v-icon>
+            <v-icon size="20" class="me-2">mdi-text-box-outline</v-icon>
             <span class="text-subtitle-2 font-weight-bold">Live Logs</span>
             <v-spacer></v-spacer>
             <div class="d-flex align-center gap-4 me-4">
@@ -347,13 +390,164 @@
           </v-card-text>
         </v-card>
       </v-window-item>
+
+      <!-- Terminal Tab -->
+      <v-window-item value="terminal">
+        <v-card
+          class="glass-card no-hover-card rounded-xl fill-height d-flex flex-column"
+          style="height: calc(100vh - 280px)"
+        >
+          <v-card-title class="pa-4 pb-2 d-flex align-center flex-wrap gap-4">
+            <v-icon size="20" class="me-2">mdi-console</v-icon>
+            <span class="text-subtitle-2 font-weight-bold me-4">Interactive Console</span>
+            
+            <div class="d-flex align-center gap-2">
+              <v-select
+                v-model="selectedShell"
+                :items="['/bin/bash', '/bin/sh', '/bin/zsh', '/bin/ash']"
+                density="compact"
+                hide-details
+                variant="solo-filled"
+                class="glass-input me-2"
+                style="width: 140px;"
+                :disabled="isTerminalConnected"
+              ></v-select>
+              <v-btn
+                :color="isTerminalConnected ? 'error' : 'primary'"
+                variant="flat"
+                @click="toggleTerminalConnection"
+                class="rounded-lg font-weight-bold"
+              >
+                {{ isTerminalConnected ? 'Disconnect' : 'Connect' }}
+              </v-btn>
+            </div>
+          </v-card-title>
+          <v-card-text class="pa-0 flex-grow-1 overflow-hidden">
+            <div
+              ref="terminalContainer"
+              class="terminal-container bg-black pa-2 fill-height"
+            >
+              <div
+                v-if="!isTerminalConnected"
+                class="d-flex align-center justify-center fill-height text-grey"
+              >
+                Select a shell and click Connect to start an interactive session.
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-window-item>
     </v-window>
+
+    <!-- Stop Confirmation Dialog -->
+    <v-dialog v-model="stopDialog" max-width="450px">
+      <v-card border flat class="bg-surface rounded-xl">
+        <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
+          <v-icon color="warning" class="me-2">mdi-alert-circle-outline</v-icon>
+          Stop Container?
+        </v-card-title>
+        <v-card-text class="pa-6 pt-2">
+          Are you sure you want to stop container <strong class="font-mono text-warning">{{ container ? formatName(container.names) : '' }}</strong>?
+        </v-card-text>
+        <v-card-actions class="pa-6 pt-0">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="stopDialog = false">Cancel</v-btn>
+          <v-btn
+            color="warning"
+            variant="flat"
+            @click="stopContainer"
+            :loading="stopping"
+            class="rounded-lg"
+          >Stop</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Restart Confirmation Dialog -->
+    <v-dialog v-model="restartDialog" max-width="450px">
+      <v-card border flat class="bg-surface rounded-xl">
+        <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
+          <v-icon color="info" class="me-2">mdi-restart</v-icon>
+          Restart Container?
+        </v-card-title>
+        <v-card-text class="pa-6 pt-2">
+          Are you sure you want to restart container <strong class="font-mono text-info">{{ container ? formatName(container.names) : '' }}</strong>?
+        </v-card-text>
+        <v-card-actions class="pa-6 pt-0">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="restartDialog = false">Cancel</v-btn>
+          <v-btn
+            color="info"
+            variant="flat"
+            @click="restartContainer"
+            :loading="restarting"
+            class="rounded-lg"
+          >Restart</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Confirmation Dialog -->
+    <v-dialog v-model="deleteDialog" max-width="450px">
+      <v-card border flat class="bg-surface rounded-xl">
+        <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
+          <v-icon color="error" class="me-2">mdi-alert-decagram</v-icon>
+          Delete Container?
+        </v-card-title>
+        <v-card-text class="pa-6 pt-2">
+          <p class="mb-4">Are you sure you want to delete container <strong class="font-mono text-error">{{ container ? formatName(container.names) : '' }}</strong>? This action cannot be undone.</p>
+          <v-checkbox
+            v-model="forceDelete"
+            label="Force delete (forcefully kill running container)"
+            color="error"
+            density="compact"
+            hide-details
+            class="mt-2"
+          ></v-checkbox>
+        </v-card-text>
+        <v-card-actions class="pa-6 pt-0">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            @click="deleteContainer"
+            :loading="deleting"
+            class="rounded-lg"
+          >Remove</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Error/Failure Dialog -->
+    <v-dialog v-model="errorDialog" max-width="500px">
+      <v-card border flat class="bg-surface rounded-xl">
+        <v-card-title class="pa-6 pb-2 text-error d-flex align-center">
+          <v-icon color="error" class="me-2">mdi-alert-circle</v-icon>
+          Operation Failed
+        </v-card-title>
+        <v-card-text class="pa-6 pt-2">
+          <p class="mb-4">The container lifecycle operation could not be completed successfully.</p>
+          <div class="bg-black bg-opacity-20 pa-4 rounded-lg font-mono text-caption text-error border border-error border-opacity-20">
+            {{ errorMessage }}
+          </div>
+        </v-card-text>
+        <v-card-actions class="pa-6 pt-0">
+          <v-spacer></v-spacer>
+          <v-btn variant="flat" color="primary" @click="errorDialog = false">Dismiss</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import Loader from "../../components/Loader.vue";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
 
 interface Port {
   ip: string;
@@ -389,6 +583,7 @@ interface ContainerDetail {
 }
 
 const route = useRoute();
+const router = useRouter();
 const container = ref<ContainerDetail | null>(null);
 const loading = ref(false);
 const tab = ref("overview");
@@ -399,6 +594,27 @@ const autoScroll = ref(true);
 const showIndex = ref(true);
 const showTimestamp = ref(true);
 const loadingLogs = ref(false);
+
+const starting = ref(false);
+const stopping = ref(false);
+const restarting = ref(false);
+const deleting = ref(false);
+
+const stopDialog = ref(false);
+const restartDialog = ref(false);
+const deleteDialog = ref(false);
+const forceDelete = ref(false);
+
+const errorDialog = ref(false);
+const errorMessage = ref("");
+
+const selectedShell = ref("/bin/sh");
+const isTerminalConnected = ref(false);
+const terminalContainer = ref<HTMLElement | null>(null);
+let term: Terminal | null = null;
+let fitAddon: FitAddon | null = null;
+let termSocket: WebSocket | null = null;
+
 let abortController: AbortController | null = null;
 
 const fetchDetails = async () => {
@@ -502,11 +718,237 @@ const clearLogs = () => {
   logs.value = [];
 };
 
+const startContainer = async () => {
+  if (!container.value) return;
+  starting.value = true;
+  try {
+    const response = await fetch(
+      `/api/containers/start?id=${container.value.id}&node=${container.value.node}`,
+      { method: "POST" }
+    );
+    if (response.ok) {
+      await fetchDetails();
+    } else {
+      const err = await response.text();
+      errorMessage.value = err;
+      errorDialog.value = true;
+    }
+  } catch (error) {
+    console.error("Failed to start container:", error);
+    errorMessage.value = String(error);
+    errorDialog.value = true;
+  } finally {
+    starting.value = false;
+  }
+};
+
+const confirmStop = () => {
+  stopDialog.value = true;
+};
+
+const stopContainer = async () => {
+  if (!container.value) return;
+  stopDialog.value = false;
+  stopping.value = true;
+  try {
+    const response = await fetch(
+      `/api/containers/stop?id=${container.value.id}&node=${container.value.node}`,
+      { method: "POST" }
+    );
+    if (response.ok) {
+      await fetchDetails();
+    } else {
+      const err = await response.text();
+      errorMessage.value = err;
+      errorDialog.value = true;
+    }
+  } catch (error) {
+    console.error("Failed to stop container:", error);
+    errorMessage.value = String(error);
+    errorDialog.value = true;
+  } finally {
+    stopping.value = false;
+  }
+};
+
+const confirmRestart = () => {
+  restartDialog.value = true;
+};
+
+const restartContainer = async () => {
+  if (!container.value) return;
+  restartDialog.value = false;
+  restarting.value = true;
+  try {
+    const response = await fetch(
+      `/api/containers/restart?id=${container.value.id}&node=${container.value.node}`,
+      { method: "POST" }
+    );
+    if (response.ok) {
+      await fetchDetails();
+    } else {
+      const err = await response.text();
+      errorMessage.value = err;
+      errorDialog.value = true;
+    }
+  } catch (error) {
+    console.error("Failed to restart container:", error);
+    errorMessage.value = String(error);
+    errorDialog.value = true;
+  } finally {
+    restarting.value = false;
+  }
+};
+
+const confirmDelete = () => {
+  deleteDialog.value = true;
+};
+
+const deleteContainer = async () => {
+  if (!container.value) return;
+  deleteDialog.value = false;
+  deleting.value = true;
+  try {
+    const response = await fetch(
+      `/api/containers?id=${container.value.id}&node=${container.value.node}&force=${forceDelete.value}`,
+      { method: "DELETE" }
+    );
+    if (response.ok) {
+      router.back();
+    } else {
+      const err = await response.text();
+      errorMessage.value = err;
+      errorDialog.value = true;
+    }
+  } catch (error) {
+    console.error("Failed to delete container:", error);
+    errorMessage.value = String(error);
+    errorDialog.value = true;
+  } finally {
+    deleting.value = false;
+  }
+};
+
+const toggleTerminalConnection = () => {
+  if (isTerminalConnected.value) {
+    disconnectTerminal();
+  } else {
+    connectTerminal();
+  }
+};
+
+const connectTerminal = () => {
+  const id = route.params.id as string;
+  const node = route.query.node as string;
+
+  if (!id || !node) return;
+
+  disconnectTerminal();
+
+  isTerminalConnected.value = true;
+
+  term = new Terminal({
+    cursorBlink: true,
+    fontSize: 14,
+    fontFamily: "Roboto Mono, Courier New, monospace",
+    theme: {
+      background: "#000000",
+      foreground: "#ffffff",
+      cursor: "#ffffff",
+    },
+  });
+
+  fitAddon = new FitAddon();
+  term.loadAddon(fitAddon);
+
+  if (terminalContainer.value) {
+    terminalContainer.value.innerHTML = "";
+    term.open(terminalContainer.value);
+    fitAddon.fit();
+  }
+
+  term.write("Connecting to shell " + selectedShell.value + "...\r\n");
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const token = localStorage.getItem("halyard_token") || "";
+  const wsUrl = `${protocol}//${window.location.host}/api/containers/exec?id=${id}&node=${node}&shell=${encodeURIComponent(selectedShell.value)}&token=${encodeURIComponent(token)}`;
+
+  termSocket = new WebSocket(wsUrl);
+  termSocket.binaryType = "arraybuffer";
+
+  termSocket.onopen = () => {
+    term?.write("\r\n--- Shell Connected ---\r\n\r\n");
+    sendTerminalSize();
+  };
+
+  termSocket.onmessage = (event) => {
+    if (term) {
+      term.write(new Uint8Array(event.data));
+    }
+  };
+
+  termSocket.onclose = () => {
+    term?.write("\r\n--- Shell Disconnected ---\r\n");
+    isTerminalConnected.value = false;
+  };
+
+  termSocket.onerror = (err) => {
+    console.error("Terminal WebSocket error:", err);
+    term?.write("\r\nError: Connection failed\r\n");
+    isTerminalConnected.value = false;
+  };
+
+  term.onData((data) => {
+    if (termSocket && termSocket.readyState === WebSocket.OPEN) {
+      termSocket.send(data);
+    }
+  });
+
+  window.addEventListener("resize", handleWindowResize);
+};
+
+const disconnectTerminal = () => {
+  window.removeEventListener("resize", handleWindowResize);
+
+  if (termSocket) {
+    termSocket.close();
+    termSocket = null;
+  }
+
+  if (term) {
+    term.dispose();
+    term = null;
+  }
+
+  fitAddon = null;
+  isTerminalConnected.value = false;
+};
+
+const sendTerminalSize = () => {
+  if (termSocket && termSocket.readyState === WebSocket.OPEN && term && fitAddon) {
+    fitAddon.fit();
+    termSocket.send(JSON.stringify({
+      type: "resize",
+      cols: term.cols,
+      rows: term.rows
+    }));
+  }
+};
+
+const handleWindowResize = () => {
+  sendTerminalSize();
+};
+
 watch(tab, (newTab) => {
   if (newTab === "logs") {
     startLogStream();
+    disconnectTerminal();
+  } else if (newTab === "terminal") {
+    stopLogStream();
+    // Don't auto-connect, let the user choose
   } else {
     stopLogStream();
+    disconnectTerminal();
   }
 });
 
@@ -550,7 +992,10 @@ onMounted(() => {
   }
 });
 
-onUnmounted(stopLogStream);
+onUnmounted(() => {
+  stopLogStream();
+  disconnectTerminal();
+});
 </script>
 
 <style scoped>
@@ -584,6 +1029,27 @@ onUnmounted(stopLogStream);
 
 .gap-2 {
   gap: 8px;
+}
+
+.terminal-container {
+  background-color: #000000 !important;
+  height: 100%;
+}
+
+.terminal-container :deep(.xterm) {
+  padding: 8px;
+  height: 100%;
+}
+
+.terminal-container :deep(.xterm-viewport) {
+  background-color: #000000 !important;
+}
+
+.glass-card.no-hover-card:hover {
+  transform: none !important;
+  background: rgba(30, 41, 59, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: none !important;
 }
 </style>
 

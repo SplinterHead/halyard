@@ -11,7 +11,7 @@
         </p>
       </div>
       <v-spacer></v-spacer>
-      <div class="d-flex gap-2">
+      <div class="d-flex align-center gap-4">
         <v-btn
           prepend-icon="mdi-broom"
           color="error"
@@ -64,7 +64,7 @@
                 cols="6"
                 class="border-e border-opacity-10 d-flex flex-column align-center justify-center"
               >
-                <div class="text-h3 font-weight-bold text-success">
+                <div class="text-h3 font-weight-bold text-success stat-number">
                   {{ onlineCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -78,7 +78,7 @@
                 cols="6"
                 class="d-flex flex-column align-center justify-center"
               >
-                <div class="text-h3 font-weight-bold text-error">
+                <div class="text-h3 font-weight-bold text-error stat-number">
                   {{ offlineCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -122,7 +122,7 @@
                 cols="6"
                 class="border-e border-opacity-10 d-flex flex-column align-center justify-center"
               >
-                <div class="text-h3 font-weight-bold text-success">
+                <div class="text-h3 font-weight-bold text-success stat-number">
                   {{ healthyStacksCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -136,7 +136,7 @@
                 cols="6"
                 class="d-flex flex-column align-center justify-center"
               >
-                <div class="text-h3 font-weight-bold text-warning">
+                <div class="text-h3 font-weight-bold text-warning stat-number">
                   {{ unhealthyStacksCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -177,7 +177,7 @@
                 cols="6"
                 class="border-e border-opacity-10 d-flex flex-column align-center justify-center"
               >
-                <div class="text-h3 font-weight-bold text-info">
+                <div class="text-h3 font-weight-bold text-info stat-number">
                   {{ runningContainersCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -191,7 +191,7 @@
                 cols="6"
                 class="d-flex flex-column align-center justify-center"
               >
-                <div class="text-h3 font-weight-bold text-grey">
+                <div class="text-h3 font-weight-bold text-grey stat-number">
                   {{ stoppedContainersCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -292,7 +292,7 @@
                 cols="4"
                 class="border-e border-opacity-10 d-flex flex-column align-center justify-center"
               >
-                <div class="text-h4 font-weight-bold text-success">
+                <div class="text-h4 font-weight-bold text-success stat-number">
                   {{ syncs.length - outOfDateSyncsCount - failedSyncsCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -306,7 +306,7 @@
                 cols="4"
                 class="border-e border-opacity-10 d-flex flex-column align-center justify-center"
               >
-                <div class="text-h4 font-weight-bold text-warning">
+                <div class="text-h4 font-weight-bold text-warning stat-number">
                   {{ outOfDateSyncsCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -320,7 +320,7 @@
                 cols="4"
                 class="d-flex flex-column align-center justify-center"
               >
-                <div class="text-h4 font-weight-bold text-error">
+                <div class="text-h4 font-weight-bold text-error stat-number">
                   {{ failedSyncsCount }}
                 </div>
                 <div class="d-flex align-center mt-1">
@@ -596,5 +596,19 @@ onMounted(fetchAllStats);
     opacity: 0.6;
     transform: scale(1.1);
   }
+}
+
+.stat-number {
+  font-family: var(--font-mono) !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+}
+
+.text-h3.stat-number {
+  font-size: 2.5rem !important;
+}
+
+.text-h4.stat-number {
+  font-size: 2rem !important;
 }
 </style>

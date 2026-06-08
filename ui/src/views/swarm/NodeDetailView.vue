@@ -41,9 +41,67 @@
         </div>
       </div>
       <v-spacer></v-spacer>
-      <v-chip size="small" variant="tonal" color="primary" prepend-icon="mdi-shield-check" class="text-uppercase font-weight-bold">
-        {{ node?.role }}
-      </v-chip>
+      <div v-if="node" class="d-flex align-center gap-2 flex-wrap">
+        <!-- Availability Chip -->
+        <v-chip size="small" variant="tonal" :color="availabilityColor" prepend-icon="mdi-layers-outline" class="text-uppercase font-weight-bold">
+          {{ node.availability }}
+        </v-chip>
+
+        <!-- Role Chip -->
+        <v-chip size="small" variant="tonal" color="primary" prepend-icon="mdi-shield-check" class="text-uppercase font-weight-bold">
+          {{ node.role }}
+        </v-chip>
+
+        <v-divider vertical class="mx-2" style="height: 24px; opacity: 0.2"></v-divider>
+
+        <!-- Action: Drain / Activate -->
+        <v-btn
+          v-if="node.availability === 'active'"
+          size="small"
+          color="warning"
+          variant="tonal"
+          prepend-icon="mdi-arrow-down-bold-circle-outline"
+          class="rounded-sm"
+          @click="triggerSwarmAction('drain')"
+        >
+          Drain
+        </v-btn>
+        <v-btn
+          v-else-if="node.availability === 'drain'"
+          size="small"
+          color="success"
+          variant="tonal"
+          prepend-icon="mdi-arrow-up-bold-circle-outline"
+          class="rounded-sm"
+          @click="triggerSwarmAction('activate')"
+        >
+          Activate
+        </v-btn>
+
+        <!-- Action: Promote / Demote -->
+        <v-btn
+          v-if="node.role === 'worker'"
+          size="small"
+          color="info"
+          variant="tonal"
+          prepend-icon="mdi-security"
+          class="rounded-sm"
+          @click="triggerSwarmAction('promote')"
+        >
+          Promote
+        </v-btn>
+        <v-btn
+          v-else-if="node.role === 'manager'"
+          size="small"
+          color="error"
+          variant="tonal"
+          prepend-icon="mdi-shield-alert"
+          class="rounded-sm"
+          @click="triggerSwarmAction('demote')"
+        >
+          Demote
+        </v-btn>
+      </div>
     </div>
 
     <!-- Confirm Delete Label Dialog -->
@@ -105,13 +163,31 @@
       </v-card>
     </v-dialog>
 
+    <!-- Confirm Swarm Action Dialog -->
+    <v-dialog v-model="confirmDialog.show" max-width="400">
+      <v-card class="solid-card pa-6">
+        <v-card-title class="text-h6 font-weight-bold px-0 pb-4">{{ confirmDialog.title }}</v-card-title>
+        <v-card-text class="pa-0 text-body-1">
+          {{ confirmDialog.text }}
+        </v-card-text>
+        <v-card-actions class="px-0 pt-6">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" color="grey" @click="confirmDialog.show = false">Cancel</v-btn>
+          <v-btn
+            variant="flat"
+            :color="confirmDialog.color"
+            :loading="updatingNode"
+            @click="executeSwarmAction"
+          >{{ confirmDialog.actionText }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-divider class="mb-6"></v-divider>
 
-    <v-row v-if="loading && !node" justify="center" class="mt-8">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </v-row>
+    <Loader :loading="loading && !node" />
 
-    <v-container v-else-if="node" fluid class="pa-0 flex-grow-1 overflow-y-auto">
+    <v-container v-if="node" fluid class="pa-0 flex-grow-1 overflow-y-auto">
       <v-row class="px-4">
         <!-- Technical Details -->
         <v-col cols="12">
@@ -216,6 +292,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import Loader from '../../components/Loader.vue'
 import NodeHistoryCharts from '../../components/NodeHistoryCharts.vue'
 
 const route = useRoute()
@@ -231,6 +308,87 @@ const newLabel = ref({ key: '', value: '' })
 const showConfirmDelete = ref(false)
 const deletingLabel = ref(false)
 const labelToDelete = ref('')
+
+const updatingNode = ref(false)
+const confirmDialog = ref({
+  show: false,
+  title: '',
+  text: '',
+  actionText: '',
+  color: 'primary',
+  payload: {} as any
+})
+
+const triggerSwarmAction = (action: 'drain' | 'activate' | 'promote' | 'demote') => {
+  if (!node.value) return
+  
+  if (action === 'drain') {
+    confirmDialog.value = {
+      show: true,
+      title: 'Drain Node',
+      text: `Are you sure you want to drain node "${node.value.hostname}"? Active service replicas will be rescheduled to other nodes.`,
+      actionText: 'Drain Node',
+      color: 'warning',
+      payload: { availability: 'drain' }
+    }
+  } else if (action === 'activate') {
+    confirmDialog.value = {
+      show: true,
+      title: 'Activate Node',
+      text: `Are you sure you want to activate node "${node.value.hostname}"? It will resume accepting Swarm tasks.`,
+      actionText: 'Activate Node',
+      color: 'success',
+      payload: { availability: 'active' }
+    }
+  } else if (action === 'promote') {
+    confirmDialog.value = {
+      show: true,
+      title: 'Promote to Manager',
+      text: `Are you sure you want to promote node "${node.value.hostname}" to a Swarm Manager?`,
+      actionText: 'Promote',
+      color: 'info',
+      payload: { role: 'manager' }
+    }
+  } else if (action === 'demote') {
+    confirmDialog.value = {
+      show: true,
+      title: 'Demote to Worker',
+      text: `Are you sure you want to demote node "${node.value.hostname}" to a Swarm Worker? It will no longer participate in cluster coordination.`,
+      actionText: 'Demote',
+      color: 'error',
+      payload: { role: 'worker' }
+    }
+  }
+}
+
+const executeSwarmAction = async () => {
+  const payload = confirmDialog.value.payload
+  if (!payload || !node.value) return
+  
+  updatingNode.value = true
+  try {
+    const response = await fetch('/api/nodes/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: node.value.node_id,
+        ...payload
+      })
+    })
+
+    if (response.ok) {
+      await fetchNodeDetail()
+      confirmDialog.value.show = false
+    } else {
+      const errMsg = await response.text()
+      console.error('Failed to update node status:', errMsg)
+    }
+  } catch (err) {
+    console.error('Failed to update node status:', err)
+  } finally {
+    updatingNode.value = false
+  }
+}
 
 const confirmDeleteLabel = (key: string) => {
   labelToDelete.value = key
@@ -295,6 +453,20 @@ const saveLabel = async () => {
 const statusColor = computed(() => {
   if (!node.value) return 'grey'
   return node.value.status === 'ready' ? 'success' : 'error'
+})
+
+const availabilityColor = computed(() => {
+  if (!node.value) return 'grey'
+  switch (node.value.availability) {
+    case 'active':
+      return 'success'
+    case 'pause':
+      return 'warning'
+    case 'drain':
+      return 'error'
+    default:
+      return 'grey'
+  }
 })
 
 const fetchNodeDetail = async () => {

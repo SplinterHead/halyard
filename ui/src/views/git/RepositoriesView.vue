@@ -1,34 +1,44 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Git Repositories</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        prepend-icon="mdi-plus"
-        color="primary"
-        @click="openAddDialog"
-        flat
-        class="me-2"
-      >
-        Add Repository
-      </v-btn>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchRepos"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search repositories..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          prepend-icon="mdi-plus"
+          color="primary"
+          @click="openAddDialog"
+          flat
+        >
+          Add Repository
+        </v-btn>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchRepos"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
 
-    <v-row v-if="loading" justify="center" class="mt-8">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </v-row>
+    <Loader :loading="loading" />
 
-    <div v-else-if="repos.length === 0" class="flex-grow-1 d-flex flex-column align-center justify-center">
+    <div v-if="repos.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
       <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-git</v-icon>
       <h3 class="text-h5 text-grey-darken-1">No Repositories Found</h3>
       <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
@@ -40,7 +50,7 @@
       <v-data-table
         :headers="headers"
         :items="repos"
-        :loading="loading"
+        :search="searchQuery"
         :sort-by="[{ key: 'name', order: 'asc' }]"
         :row-props="getRowProps"
         class="bg-transparent"
@@ -214,7 +224,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import Loader from '../../components/Loader.vue'
 import RelativeTime from '../../components/RelativeTime.vue'
+
+const searchQuery = ref('')
 
 interface GitRepo {
   id?: string

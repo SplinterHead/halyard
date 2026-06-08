@@ -1,16 +1,29 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Deployment Events</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchEvents"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search events..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchEvents"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
@@ -30,6 +43,7 @@
       :headers="headers"
       :items="events"
       :loading="loading"
+      :search="searchQuery"
       :row-props="getRowProps"
       class="bg-transparent"
       hover
@@ -74,6 +88,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import RelativeTime from "../../components/RelativeTime.vue";
+
+const searchQuery = ref("");
 
 interface DeploymentEvent {
   id: string;

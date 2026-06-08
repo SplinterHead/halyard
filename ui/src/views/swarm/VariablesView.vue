@@ -1,30 +1,44 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Swarm Configs</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        prepend-icon="mdi-plus"
-        color="primary"
-        @click="dialog = true"
-        flat
-        class="me-2"
-      >
-        Create Config
-      </v-btn>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchConfigs"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search configs..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          prepend-icon="mdi-plus"
+          color="primary"
+          @click="dialog = true"
+          flat
+        >
+          Create Config
+        </v-btn>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchConfigs"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
 
-    <div v-if="configs.length === 0" class="flex-grow-1 d-flex flex-column align-center justify-center">
+    <Loader :loading="loading" />
+
+    <div v-if="configs.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
       <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-code-braces</v-icon>
       <h3 class="text-h5 text-grey-darken-1">No Configs Found</h3>
       <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
@@ -36,7 +50,7 @@
       <v-data-table
         :headers="headers"
         :items="configs"
-        :loading="loading"
+        :search="searchQuery"
         :sort-by="[{ key: 'name', order: 'asc' }]"
         class="bg-transparent"
         hover
@@ -44,7 +58,7 @@
         items-per-page="25"
       >
         <template v-slot:item.name="{ value }">
-          <span class="text-body-2 font-weight-bold">{{ value }}</span>
+          <span class="text-body-2 font-weight-bold">{{ formatConfigName(value) }}</span>
         </template>
 
         <template v-slot:item.id="{ value }">
@@ -140,11 +154,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import RelativeTime from '../../components/RelativeTime.vue'
+import Loader from '../../components/Loader.vue'
+
+const searchQuery = ref('')
 
 interface Config {
   id: string
   name: string
   created_at: string
+}
+
+const formatConfigName = (name: string) => {
+  return name.replace(/-v\d+$/, '')
 }
 
 const configs = ref<Config[]>([])
@@ -172,7 +193,24 @@ const fetchConfigs = async () => {
   loading.value = true
   try {
     const response = await fetch('/api/configs')
-    configs.value = await response.json()
+    const rawConfigs: Config[] = await response.json()
+    
+    // Group configs by base name and keep only the latest version
+    const grouped = new Map<string, { config: Config, version: number }>()
+    for (const c of rawConfigs) {
+      const match = c.name.match(/^(.*?)(?:-v(\d+))?$/)
+      if (match) {
+        const baseName = match[1]
+        const version = match[2] ? parseInt(match[2], 10) : 1
+        
+        const existing = grouped.get(baseName)
+        if (!existing || version > existing.version) {
+          grouped.set(baseName, { config: c, version })
+        }
+      }
+    }
+    
+    configs.value = Array.from(grouped.values()).map(v => v.config)
   } catch (error) {
     console.error('Failed to fetch configs:', error)
   } finally {

@@ -1,34 +1,44 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Cluster Nodes</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        prepend-icon="mdi-plus-box-outline"
-        color="primary"
-        variant="tonal"
-        class="me-2 animate-pulse-glow"
-        @click="openJoinDialog"
-      >
-        Add Node
-      </v-btn>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchNodes"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search nodes..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          prepend-icon="mdi-plus"
+          color="primary"
+          flat
+          @click="openJoinDialog"
+        >
+          Add Node
+        </v-btn>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchNodes"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
     
-    <v-row v-if="loading" justify="center" class="mt-8">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </v-row>
+    <Loader :loading="loading" />
 
-    <v-row v-else-if="nodes.length === 0" justify="center" class="mt-8">
+    <v-row v-if="nodes.length === 0 && !loading" justify="center" class="mt-8">
       <v-col cols="12" md="6" class="text-center">
         <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-lan-disconnect</v-icon>
         <h3 class="text-h5 text-grey-darken-1">No nodes detected</h3>
@@ -42,7 +52,7 @@
       <v-data-table
         :headers="headers"
         :items="nodes"
-        :loading="loading"
+        :search="searchQuery"
         :sort-by="[{ key: 'hostname', order: 'asc' }]"
         :row-props="getRowProps"
         class="bg-transparent"
@@ -51,7 +61,7 @@
         items-per-page="25"
       >
         <template v-slot:item.hostname="{ value }">
-          <code>{{ value }}</code>
+          <span class="text-body-2 font-weight-bold">{{ value }}</span>
         </template>
 
         <template v-slot:item.role="{ value }">
@@ -115,7 +125,7 @@
         
         <v-card-text class="pa-6 pt-2">
           <div v-if="loadingTokens" class="d-flex flex-column align-center py-8">
-            <v-progress-circular indeterminate color="primary" size="48" class="mb-4"></v-progress-circular>
+            <v-progress-linear indeterminate color="primary" style="width: 250px; border-radius: 4px;" class="mb-4"></v-progress-linear>
             <span class="text-body-2 text-grey">Retrieving Swarm Join Tokens...</span>
           </div>
 
@@ -186,6 +196,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import Loader from '../../components/Loader.vue'
+
+const searchQuery = ref('')
 
 const router = useRouter()
 

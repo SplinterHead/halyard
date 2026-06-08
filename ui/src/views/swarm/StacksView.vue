@@ -1,29 +1,36 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Swarm Stacks</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchStacks"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search stacks..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchStacks"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
 
-    <v-row v-if="loading" justify="center" class="mt-8">
-      <v-progress-circular
-        indeterminate
-        color="primary"
-        size="64"
-      ></v-progress-circular>
-    </v-row>
+    <Loader :loading="loading" />
 
-    <v-row v-else-if="stacks.length === 0" justify="center" class="mt-8">
+    <v-row v-if="stacks.length === 0 && !loading" justify="center" class="mt-8">
       <v-col cols="12" md="6" class="text-center">
         <v-icon size="64" color="grey-lighten-1" class="mb-4"
           >mdi-layers-off-outline</v-icon
@@ -40,7 +47,7 @@
       <v-data-table
         :headers="headers"
         :items="stacks"
-        :loading="loading"
+        :search="searchQuery"
         :sort-by="[{ key: 'name', order: 'asc' }]"
         :row-props="getRowProps"
         class="bg-transparent"
@@ -62,6 +69,16 @@
 
         <template v-slot:item.actions="{ item }">
           <div class="d-flex justify-center">
+            <v-btn
+              v-if="item.name !== 'Orphaned/Manual'"
+              icon="mdi-restart"
+              size="x-small"
+              variant="text"
+              color="warning"
+              :loading="restartingStack === item.name"
+              @click.stop="restartStack(item.name)"
+              title="Force Restart"
+            ></v-btn>
             <v-btn
               v-if="item.name !== 'Orphaned/Manual'"
               icon="mdi-delete-outline"
@@ -104,6 +121,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import Loader from "../../components/Loader.vue";
+
+const searchQuery = ref("");
 import RelativeTime from "../../components/RelativeTime.vue";
 
 const router = useRouter();
@@ -125,6 +145,7 @@ const loading = ref(false);
 const deleteDialog = ref(false);
 const deleting = ref(false);
 const stackToDelete = ref<Stack | null>(null);
+const restartingStack = ref<string | null>(null);
 
 const getRowProps = ({ item }: any) => {
   const status = item.status;
@@ -184,6 +205,25 @@ const fetchStacks = async () => {
 const confirmDelete = (stack: Stack) => {
   stackToDelete.value = stack;
   deleteDialog.value = true;
+};
+
+const restartStack = async (name: string) => {
+  restartingStack.value = name;
+  try {
+    const response = await fetch(`/api/stacks/restart?name=${name}`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      alert("Failed to restart stack: " + text);
+    } else {
+      await fetchStacks();
+    }
+  } catch (err) {
+    console.error("Failed to restart stack:", err);
+  } finally {
+    restartingStack.value = null;
+  }
 };
 
 const deleteStack = async () => {

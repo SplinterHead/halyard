@@ -1,28 +1,42 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Swarm Secrets</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        prepend-icon="mdi-plus"
-        color="primary"
-        @click="dialog = true"
-        flat
-        class="me-2"
-      >
-        Create Secret
-      </v-btn>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchSecrets"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search secrets..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          prepend-icon="mdi-plus"
+          color="primary"
+          @click="dialog = true"
+          flat
+        >
+          Create Secret
+        </v-btn>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchSecrets"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <v-divider class="my-4"></v-divider>
+
+    <Loader :loading="loading" />
 
     <div v-if="secrets.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
       <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-lock-outline</v-icon>
@@ -36,7 +50,7 @@
       <v-data-table
         :headers="headers"
         :items="secrets"
-        :loading="loading"
+        :search="searchQuery"
         :sort-by="[{ key: 'name', order: 'asc' }]"
         class="bg-transparent"
         hover
@@ -140,6 +154,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import RelativeTime from '../../components/RelativeTime.vue'
+import Loader from '../../components/Loader.vue'
+
+const searchQuery = ref('')
 
 interface Secret {
   id: string
