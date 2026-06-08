@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -87,11 +90,54 @@ func (m *VolumeManager) ListVolumes(ctx context.Context) ([]api.VolumeInfo, erro
 
 func (m *VolumeManager) PruneVolumes(ctx context.Context) (types.VolumesPruneReport, error) {
 	pruneFilters := filters.NewArgs()
-	pruneFilters.Add("all", "true")
+	pruneFilters.Add("all", "1")
 	return m.docker.VolumesPrune(ctx, pruneFilters)
 }
 
 func (m *VolumeManager) RemoveVolume(ctx context.Context, name string, force bool) error {
 	return m.docker.VolumeRemove(ctx, name, force)
+}
+
+func (m *VolumeManager) BrowseVolume(ctx context.Context, volumeName string, subPath string) ([]api.VolumeFileEntry, error) {
+	vol, err := m.docker.VolumeInspect(ctx, volumeName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect volume: %w", err)
+	}
+
+	mountpoint := vol.Mountpoint
+	if mountpoint == "" {
+		return nil, fmt.Errorf("volume %s has no mountpoint", volumeName)
+	}
+
+	targetPath := filepath.Clean(filepath.Join(mountpoint, subPath))
+	// Basic directory traversal prevention
+	if !strings.HasPrefix(targetPath, filepath.Clean(mountpoint)) {
+		return nil, fmt.Errorf("invalid path: escapes volume mountpoint")
+	}
+
+	entries, err := os.ReadDir(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	var fileEntries []api.VolumeFileEntry
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue // Skip files we can't stat
+		}
+
+		fileEntries = append(fileEntries, api.VolumeFileEntry{
+			Name:       entry.Name(),
+			Path:       filepath.ToSlash(filepath.Join(subPath, entry.Name())),
+			IsDir:      entry.IsDir(),
+			Size:       info.Size(),
+			ModifiedAt: info.ModTime(),
+			CreatedAt:  info.ModTime(), // Fallback as Go doesn't easily expose birthtime across all Linux FS
+			Permission: info.Mode().String(),
+		})
+	}
+
+	return fileEntries, nil
 }
 

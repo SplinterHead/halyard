@@ -1,26 +1,38 @@
 <template>
   <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center">
+    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
       <h1 class="text-h4 font-weight-bold">Swarm Volumes</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        prepend-icon="mdi-broom"
-        color="error"
-        variant="tonal"
-        class="mr-2"
-        @click="showPruneDialog = true"
-        :loading="pruning"
-      >
-        Prune Unused
-      </v-btn>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchVolumes"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
+      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
+        <v-text-field
+          v-model="searchQuery"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Search volumes..."
+          variant="solo-filled"
+          density="compact"
+          flat
+          hide-details
+          rounded="lg"
+          class="search-input glass-input"
+          style="width: 280px"
+        ></v-text-field>
+        <v-btn
+          prepend-icon="mdi-broom"
+          color="error"
+          variant="tonal"
+          @click="showPruneDialog = true"
+          :loading="pruning"
+        >
+          Prune Unused
+        </v-btn>
+        <v-btn
+          icon="mdi-refresh"
+          @click="fetchVolumes"
+          :loading="loading"
+          size="x-small"
+          class="refresh-btn"
+          flat
+        ></v-btn>
+      </div>
     </div>
 
     <!-- Prune Confirmation Dialog -->
@@ -83,12 +95,10 @@
     </v-dialog>
 
     <v-divider class="my-4"></v-divider>
+    
+    <Loader :loading="loading" />
 
-    <v-row v-if="loading" justify="center" class="mt-8">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-    </v-row>
-
-    <v-row v-else-if="volumes.length === 0" justify="center" class="mt-8">
+    <v-row v-if="volumes.length === 0 && !loading" justify="center" class="mt-8">
       <v-col cols="12" md="6" class="text-center">
         <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-database-off</v-icon>
         <h3 class="text-h5 text-grey-darken-1">No volumes found</h3>
@@ -102,7 +112,7 @@
       <v-data-table
         :headers="headers"
         :items="volumes"
-        :loading="loading"
+        :search="searchQuery"
         :sort-by="[{ key: 'name', order: 'asc' }]"
         :row-props="getRowProps"
         class="bg-transparent"
@@ -162,23 +172,44 @@
         <template v-slot:item.actions="{ item }">
           <div class="d-flex justify-center align-center">
             <v-btn
+              icon="mdi-folder-search-outline"
+              size="x-small"
+              variant="text"
+              color="primary"
+              class="mr-2"
+              @click.stop="openExplorer(item)"
+              title="Browse Volume Files"
+            ></v-btn>
+            <v-btn
               icon="mdi-delete-outline"
               size="x-small"
               variant="text"
               color="error"
               @click.stop="confirmDelete(item)"
+              title="Delete Volume"
             ></v-btn>
           </div>
         </template>
 
       </v-data-table>
     </div>
+
+    <!-- Volume Explorer Dialog -->
+    <VolumeExplorerDialog
+      v-model="explorerDialog"
+      :volume-name="selectedVolumeName"
+      :node-name="selectedNodeName"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import Loader from '../../components/Loader.vue'
 import RelativeTime from '../../components/RelativeTime.vue'
+
+const searchQuery = ref('')
+import VolumeExplorerDialog from '../../components/VolumeExplorerDialog.vue'
 
 interface Volume {
   name: string
@@ -201,6 +232,10 @@ const deleting = ref(false)
 const volumeToDelete = ref<Volume | null>(null)
 const errorDialog = ref(false)
 const errorMessage = ref('')
+
+const explorerDialog = ref(false)
+const selectedVolumeName = ref('')
+const selectedNodeName = ref('')
 
 const getRowProps = ({ item }: any) => {
   return {
@@ -288,6 +323,12 @@ const fetchVolumes = async () => {
 const confirmDelete = (volume: Volume) => {
   volumeToDelete.value = volume
   deleteDialog.value = true
+}
+
+const openExplorer = (volume: Volume) => {
+  selectedVolumeName.value = volume.name
+  selectedNodeName.value = volume.node
+  explorerDialog.value = true
 }
 
 const deleteVolume = async () => {
