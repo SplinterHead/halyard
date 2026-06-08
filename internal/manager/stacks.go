@@ -25,6 +25,10 @@ func NewStackManager(cli *docker.Client) *StackManager {
 	return &StackManager{docker: cli}
 }
 
+func (m *StackManager) GetDockerClient() *docker.Client {
+	return m.docker
+}
+
 func (m *StackManager) ListStacks(ctx context.Context) ([]api.Stack, error) {
 	services, err := m.docker.ServiceList(ctx, types.ServiceListOptions{Status: true})
 	if err != nil {
@@ -220,6 +224,70 @@ func (m *StackManager) RemoveStack(ctx context.Context, name string) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("remove failed: %v, output: %s", err, string(output))
+	}
+	return nil
+}
+
+func (m *StackManager) RestartStack(ctx context.Context, name string, svcMgr *ServiceManager) error {
+	services, err := svcMgr.ListServices(ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range services {
+		if s.Stack == name {
+			err := svcMgr.RestartService(ctx, s.ID)
+			if err != nil {
+				return fmt.Errorf("failed to restart service %s: %v", s.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (m *StackManager) StopStack(ctx context.Context, name string, svcMgr *ServiceManager) error {
+	services, err := svcMgr.ListServices(ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range services {
+		if s.Stack == name && s.Mode == "replicated" {
+			err := svcMgr.StopService(ctx, s.ID)
+			if err != nil {
+				return fmt.Errorf("failed to stop service %s: %v", s.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (m *StackManager) StartStack(ctx context.Context, name string, svcMgr *ServiceManager) error {
+	services, err := svcMgr.ListServices(ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range services {
+		if s.Stack == name && s.Mode == "replicated" {
+			err := svcMgr.StartService(ctx, s.ID)
+			if err != nil {
+				return fmt.Errorf("failed to start service %s: %v", s.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (m *StackManager) RollbackStack(ctx context.Context, name string, svcMgr *ServiceManager) error {
+	services, err := svcMgr.ListServices(ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range services {
+		if s.Stack == name {
+			err := svcMgr.RollbackService(ctx, s.ID)
+			if err != nil {
+				return fmt.Errorf("failed to rollback service %s: %v", s.Name, err)
+			}
+		}
 	}
 	return nil
 }
