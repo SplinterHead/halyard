@@ -52,10 +52,11 @@
         :items="configs"
         :search="searchQuery"
         :sort-by="[{ key: 'name', order: 'asc' }]"
-        class="bg-transparent"
+        class="bg-transparent cursor-pointer"
         hover
         density="comfortable"
         items-per-page="25"
+        @click:row="openViewDialog"
       >
         <template v-slot:item.name="{ value }">
           <span class="text-body-2 font-weight-bold">{{ formatConfigName(value) }}</span>
@@ -76,7 +77,7 @@
               size="x-small"
               variant="text"
               color="error"
-              @click="confirmDelete(item)"
+              @click.stop="confirmDelete(item)"
             ></v-btn>
           </div>
         </template>
@@ -148,6 +149,30 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- View Config Dialog -->
+    <v-dialog v-model="viewDialog" max-width="800px">
+      <v-card border flat class="bg-surface">
+        <v-card-title class="pa-6 pb-2 d-flex justify-space-between align-center">
+          <span class="text-h5 font-weight-bold">View Config: {{ viewedConfig?.name }}</span>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="viewDialog = false"></v-btn>
+        </v-card-title>
+        <v-divider></v-divider>
+        <v-card-text class="pa-0">
+          <Loader :loading="loadingView" />
+          <v-sheet
+            v-if="!loadingView && viewedConfigData"
+            class="pa-4 bg-black overflow-y-auto"
+            style="max-height: 500px;"
+          >
+            <pre class="font-mono text-body-2 mb-0" style="white-space: pre-wrap; word-break: break-all; color: #a9b7c6;">{{ viewedConfigData }}</pre>
+          </v-sheet>
+          <div v-else-if="!loadingView && !viewedConfigData" class="pa-6 text-center text-grey">
+            No data or unable to load.
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -176,6 +201,11 @@ const deleteDialog = ref(false)
 const deleting = ref(false)
 const valid = ref(false)
 const configToDelete = ref<Config | null>(null)
+
+const viewDialog = ref(false)
+const loadingView = ref(false)
+const viewedConfig = ref<Config | null>(null)
+const viewedConfigData = ref<string>('')
 
 const newConfig = ref({
   name: '',
@@ -269,6 +299,40 @@ const deleteConfig = async () => {
 const closeDialog = () => {
   dialog.value = false
   newConfig.value = { name: '', data: '' }
+}
+
+const openViewDialog = async (event: any, { item }: { item: Config }) => {
+  viewedConfig.value = item
+  viewedConfigData.value = ''
+  viewDialog.value = true
+  loadingView.value = true
+  try {
+    const response = await fetch(`/api/configs/${item.id}`)
+    if (response.ok) {
+      const detail = await response.json()
+      // Use the raw data.
+      let data = detail.data || ''
+      // Try to decode base64 if it is base64
+      try {
+        if (data && /^[A-Za-z0-9+/=]+$/.test(data)) {
+          const decoded = atob(data)
+          // Simple heuristic to verify it's likely meant to be text rather than binary bytes
+          if (/^[\x20-\x7E\t\r\n]*$/.test(decoded)) {
+            data = decoded
+          }
+        }
+      } catch (e) {
+        // Not base64
+      }
+      viewedConfigData.value = data || 'No content'
+    } else {
+      viewedConfigData.value = 'Failed to load configuration data.'
+    }
+  } catch (e) {
+    viewedConfigData.value = 'Error loading configuration data.'
+  } finally {
+    loadingView.value = false
+  }
 }
 
 onMounted(fetchConfigs)

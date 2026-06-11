@@ -52,3 +52,19 @@ func (m *ConfigManager) CreateConfig(ctx context.Context, name string, data []by
 func (m *ConfigManager) RemoveConfig(ctx context.Context, id string) error {
 	return m.docker.ConfigRemove(ctx, id)
 }
+
+func (m *ConfigManager) GetConfig(ctx context.Context, id string) (*api.ConfigInfo, error) {
+	config, _, err := m.docker.ConfigInspectWithRaw(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &api.ConfigInfo{
+		ID:        config.ID,
+		Name:      config.Spec.Name,
+		CreatedAt: config.CreatedAt,
+		UpdatedAt: config.UpdatedAt,
+		Labels:    config.Spec.Labels,
+		Data:      string(config.Spec.Data),
+	}, nil
+}
+
