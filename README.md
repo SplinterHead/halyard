@@ -1,5 +1,7 @@
 # <img src="ui/public/logo.png" width="64" height="64" align="center"> Halyard
 
+![Screenshot of Cluster Overview (Home) page](/docs/wiki/screens/03-home.png)
+
 **Halyard** is a modern, lightweight, and intuitive GitOps & observability platform designed specifically for Docker Swarm clusters. Built from the ground up to give you full visibility and automated deployment capabilities, Halyard hoists your Swarm services, stacks, and nodes into a unified, stunning control center.
 
 With Halyard, you can stop SSH-ing into your manager nodes to deploy stacks, read logs, or prune resources. Instead, manage everything from a centralized, real-time visual dashboard that automatically synchronizes your services with Git.
