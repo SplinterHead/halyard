@@ -3,7 +3,27 @@
   --secondary-glow: radial-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
   --font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* Default ANSI Log Colors */
+  --ansi-black: #000000;
+  --ansi-red: #bb0000;
+  --ansi-green: #00bb00;
+  --ansi-yellow: #bbbb00;
+  --ansi-blue: #0000bb;
+  --ansi-magenta: #bb00bb;
+  --ansi-cyan: #00bbbb;
+  --ansi-white: #ffffff;
 }
+
+.ansi-black-fg, .ansi-bright-black-fg { color: var(--ansi-black); }
+.ansi-red-fg, .ansi-bright-red-fg { color: var(--ansi-red); }
+.ansi-green-fg, .ansi-bright-green-fg { color: var(--ansi-green); }
+.ansi-yellow-fg, .ansi-bright-yellow-fg { color: var(--ansi-yellow); }
+.ansi-blue-fg, .ansi-bright-blue-fg { color: var(--ansi-blue); }
+.ansi-magenta-fg, .ansi-bright-magenta-fg { color: var(--ansi-magenta); }
+.ansi-cyan-fg, .ansi-bright-cyan-fg { color: var(--ansi-cyan); }
+.ansi-white-fg, .ansi-bright-white-fg { color: var(--ansi-white); }
+
 
 body {
   margin: 0;

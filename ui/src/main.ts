@@ -29,7 +29,9 @@ window.fetch = async (input, init) => {
     if (!urlStr.includes("/api/auth/login") && !urlStr.includes("/api/auth/status")) {
       localStorage.removeItem("halyard_token");
       localStorage.removeItem("halyard_user");
-      window.location.href = "/login";
+      if (window.location.pathname !== "/login" && window.location.pathname !== "/onboarding") {
+        window.location.href = "/login";
+      }
     }
   }
 

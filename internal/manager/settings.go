@@ -30,7 +30,13 @@ func (m *SettingsManager) GetSettings() api.Settings {
 
 	var s api.Settings
 	if err := json.Unmarshal([]byte(val), &s); err != nil {
-		return api.Settings{GitSyncConcurrency: 5}
+		return api.Settings{
+			GitSyncConcurrency: 5,
+			LogColors:          make(map[string]string),
+		}
+	}
+	if s.LogColors == nil {
+		s.LogColors = make(map[string]string)
 	}
 	return s
 }

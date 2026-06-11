@@ -372,9 +372,7 @@
                   class="log-timestamp me-2 text-caption opacity-80"
                   >{{ formatLogTime(log.timestamp) }}</span
                 >
-                <span class="log-content text-body-2 pre-wrap">{{
-                  log.content
-                }}</span>
+                <span class="log-content text-body-2 pre-wrap" v-html="log.htmlContent"></span>
               </div>
               <div
                 v-if="logs.length === 0"
@@ -548,6 +546,10 @@ import Loader from "../../components/Loader.vue";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import { AnsiUp } from "ansi_up";
+
+const ansi = new AnsiUp();
+ansi.use_classes = true;
 
 interface Port {
   ip: string;
@@ -588,7 +590,7 @@ const container = ref<ContainerDetail | null>(null);
 const loading = ref(false);
 const tab = ref("overview");
 
-const logs = ref<{ timestamp: string; content: string }[]>([]);
+const logs = ref<{ timestamp: string; content: string; htmlContent: string }[]>([]);
 const logContainer = ref<HTMLElement | null>(null);
 const autoScroll = ref(true);
 const showIndex = ref(true);
@@ -670,11 +672,13 @@ const startLogStream = () => {
           logs.value.push({
             timestamp: tsMatch[1],
             content: tsMatch[2],
+            htmlContent: ansi.ansi_to_html(tsMatch[2]),
           });
         } else {
           logs.value.push({
             timestamp: "",
             content: line,
+            htmlContent: ansi.ansi_to_html(line),
           });
         }
 

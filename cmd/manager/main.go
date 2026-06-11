@@ -781,7 +781,7 @@ func main() {
 			}
 			newRepo, err := gitMgr.AddRepo(repo)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusUnauthorized)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 			w.WriteHeader(http.StatusCreated)
@@ -823,7 +823,7 @@ func main() {
 			if r.Method == http.MethodPost {
 				err := gitMgr.TestRepo(repoID)
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusUnauthorized)
+					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
 				}
 				w.WriteHeader(http.StatusNoContent)
@@ -1150,8 +1150,18 @@ func main() {
 	})
 
 	http.HandleFunc("/api/configs/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/api/configs/")
+		if r.Method == http.MethodGet {
+			config, err := configMgr.GetConfig(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(config)
+			return
+		}
 		if r.Method == http.MethodDelete {
-			id := strings.TrimPrefix(r.URL.Path, "/api/configs/")
 			err := configMgr.RemoveConfig(r.Context(), id)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)

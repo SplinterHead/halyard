@@ -185,8 +185,9 @@ type GitSync struct {
 
 // Settings represents application-wide configuration
 type Settings struct {
-	GitSyncInterval    int `json:"git_sync_interval"` // In minutes
-	GitSyncConcurrency int `json:"git_sync_concurrency"`
+	GitSyncInterval    int               `json:"git_sync_interval"` // In minutes
+	GitSyncConcurrency int               `json:"git_sync_concurrency"`
+	LogColors          map[string]string `json:"log_colors"`
 }
 
 type DeploymentEvent struct {
@@ -213,6 +214,7 @@ type ConfigInfo struct {
 	UpdatedAt time.Time         `json:"updated_at"`
 	CreatedAt time.Time         `json:"created_at"`
 	Labels    map[string]string `json:"labels"`
+	Data      string            `json:"data,omitempty"`
 }
 
 type TaskInfo struct {
