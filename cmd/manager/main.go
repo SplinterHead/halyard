@@ -153,6 +153,80 @@ func main() {
 		})
 	})
 
+	http.HandleFunc("/api/auth/password", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+
+		username, err := manager.ValidateToken(token, sessionSecret)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		var req api.UpdatePasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		err = db.UpdateUserPassword(username, req.CurrentPassword, req.NewPassword)
+		if err != nil {
+			if err.Error() == "invalid current password" {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+			} else {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	http.HandleFunc("/api/user/preferences", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+
+		username, err := manager.ValidateToken(token, sessionSecret)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		var prefs map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		err = db.UpdateUserPreferences(username, prefs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(prefs)
+	})
+
 	http.HandleFunc("/api/swarm/tokens", func(w http.ResponseWriter, r *http.Request) {
 		swarmInfo, err := cli.SwarmInspect(r.Context())
 		if err != nil {

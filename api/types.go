@@ -185,9 +185,8 @@ type GitSync struct {
 
 // Settings represents application-wide configuration
 type Settings struct {
-	GitSyncInterval    int               `json:"git_sync_interval"` // In minutes
-	GitSyncConcurrency int               `json:"git_sync_concurrency"`
-	LogColors          map[string]string `json:"log_colors"`
+	GitSyncInterval    int `json:"git_sync_interval"` // In minutes
+	GitSyncConcurrency int `json:"git_sync_concurrency"`
 }
 
 type DeploymentEvent struct {
@@ -316,10 +315,11 @@ type DockerHubRateLimit struct {
 
 // User represents the system user
 type User struct {
-	ID        string    `json:"id"`
-	Username  string    `json:"username"`
-	RealName  string    `json:"real_name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string            `json:"id"`
+	Username    string            `json:"username"`
+	RealName    string            `json:"real_name"`
+	Preferences map[string]string `json:"preferences"`
+	CreatedAt   time.Time         `json:"created_at"`
 }
 
 // RegisterRequest represents the payload to register the first user
@@ -348,4 +348,8 @@ type AgentHeartbeat struct {
 	Hostname string `json:"hostname"`
 }
 
-
+// UpdatePasswordRequest represents the payload to update a user's password
+type UpdatePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}

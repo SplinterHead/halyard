@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -35,9 +36,9 @@ func (d *DB) CreateUser(username, realName, password string) (*api.User, error) 
 		return nil, errors.New("username, real name, and password cannot be empty")
 	}
 
-	// Enforce password requirements (e.g. min 8 chars)
-	if len(password) < 8 {
-		return nil, errors.New("password must be at least 8 characters long")
+	// Enforce password requirements
+	if err := ValidatePassword(password); err != nil {
+		return nil, err
 	}
 
 	// Double-check if a user already exists (zero-trust enforcement)
@@ -65,10 +66,11 @@ func (d *DB) CreateUser(username, realName, password string) (*api.User, error) 
 	}
 
 	return &api.User{
-		ID:        id,
-		Username:  username,
-		RealName:  realName,
-		CreatedAt: now,
+		ID:          id,
+		Username:    username,
+		RealName:    realName,
+		Preferences: make(map[string]string),
+		CreatedAt:   now,
 	}, nil
 }
 
@@ -81,9 +83,10 @@ func (d *DB) AuthenticateUser(username, password string) (*api.User, error) {
 
 	var user api.User
 	var passwordHash string
+	var prefStr string
 
-	err := d.QueryRow("SELECT id, username, real_name, password_hash, created_at FROM users WHERE username = ?", username).
-		Scan(&user.ID, &user.Username, &user.RealName, &passwordHash, &user.CreatedAt)
+	err := d.QueryRow("SELECT id, username, real_name, password_hash, preferences, created_at FROM users WHERE username = ?", username).
+		Scan(&user.ID, &user.Username, &user.RealName, &passwordHash, &prefStr, &user.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, errors.New("invalid username or password")
 	} else if err != nil {
@@ -94,6 +97,11 @@ func (d *DB) AuthenticateUser(username, password string) (*api.User, error) {
 	err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
 	if err != nil {
 		return nil, errors.New("invalid username or password")
+	}
+
+	user.Preferences = make(map[string]string)
+	if prefStr != "" && prefStr != "{}" {
+		json.Unmarshal([]byte(prefStr), &user.Preferences)
 	}
 
 	return &user, nil
@@ -157,4 +165,69 @@ func ValidateToken(tokenStr string, secret []byte) (string, error) {
 	}
 	
 	return string(usernameBytes), nil
+}
+
+// ValidatePassword ensures the password meets security requirements
+func ValidatePassword(password string) error {
+	if len(password) < 8 {
+		return errors.New("password must be at least 8 characters long")
+	}
+	// Future: add more complex validation here
+	return nil
+}
+
+// UpdateUserPassword verifies the current password and sets a new one
+func (d *DB) UpdateUserPassword(username, currentPassword, newPassword string) error {
+	// First ensure the new password meets requirements
+	if err := ValidatePassword(newPassword); err != nil {
+		return err
+	}
+
+	// Verify the current password is correct
+	_, err := d.AuthenticateUser(username, currentPassword)
+	if err != nil {
+		return errors.New("invalid current password")
+	}
+
+	// Securely hash the new password
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash new password: %w", err)
+	}
+
+	// Update in DB
+	res, err := d.Exec("UPDATE users SET password_hash = ? WHERE username = ?", string(hashBytes), username)
+	if err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+	
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("could not determine updated rows: %w", err)
+	}
+	if rows == 0 {
+		return errors.New("user not found")
+	}
+
+	return nil
+}
+
+// UpdateUserPreferences saves the preferences map for a user
+func (d *DB) UpdateUserPreferences(username string, prefs map[string]string) error {
+	data, err := json.Marshal(prefs)
+	if err != nil {
+		return err
+	}
+	res, err := d.Exec("UPDATE users SET preferences = ? WHERE username = ?", string(data), username)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.New("user not found")
+	}
+	return nil
 }

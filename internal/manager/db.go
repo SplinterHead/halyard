@@ -94,6 +94,7 @@ func (d *DB) initSchema() error {
 			username TEXT UNIQUE,
 			real_name TEXT,
 			password_hash TEXT,
+			preferences TEXT DEFAULT '{}',
 			created_at DATETIME
 		);`,
 		`CREATE TABLE IF NOT EXISTS registries (
@@ -125,6 +126,7 @@ func (d *DB) initSchema() error {
 
 	// Simple migrations
 	_, _ = d.Exec("ALTER TABLE git_syncs ADD COLUMN stack_name TEXT")
+	_, _ = d.Exec("ALTER TABLE users ADD COLUMN preferences TEXT DEFAULT '{}'")
 	_, _ = d.Exec("ALTER TABLE git_syncs ADD COLUMN pull_additional_files BOOLEAN DEFAULT 0")
 	_, _ = d.Exec("ALTER TABLE git_syncs ADD COLUMN auto_sync BOOLEAN DEFAULT 0")
 	_, _ = d.Exec("ALTER TABLE git_syncs ADD COLUMN last_sync_at DATETIME")
