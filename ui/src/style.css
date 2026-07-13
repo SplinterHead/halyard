@@ -79,6 +79,13 @@ code, pre, .font-mono, .text-mono {
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
 }
 
+.v-list.menu-blur {
+  background: rgba(15, 23, 42, 0.85) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
 .glass-card {
   background: rgba(30, 41, 59, 0.4) !important;
   backdrop-filter: blur(8px) !important;
@@ -159,6 +166,7 @@ code, pre, .font-mono, .text-mono {
   letter-spacing: 0 !important;
   font-weight: 500 !important;
   border-radius: 8px !important;
+  font-family: var(--font-family) !important;
 }
 
 .v-list {

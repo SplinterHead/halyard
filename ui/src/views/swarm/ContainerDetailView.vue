@@ -364,7 +364,7 @@
               <div v-for="(log, idx) in logs" :key="idx" class="log-line">
                 <span
                   v-if="showIndex"
-                  class="text-grey-darken-1 me-2 text-caption opacity-50"
+                  class="log-index me-2 text-caption opacity-50"
                   >[{{ idx + 1 }}]</span
                 >
                 <span
@@ -1020,7 +1020,11 @@ onUnmounted(() => {
 }
 
 .log-timestamp {
-  color: #22d3ee !important; /* Cyan-400 */
+  color: var(--ansi-cyan, #22d3ee) !important;
+}
+
+.log-index {
+  color: var(--ansi-white, #757575) !important;
 }
 
 .log-content {

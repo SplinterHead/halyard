@@ -44,7 +44,7 @@
             Actions
           </v-btn>
         </template>
-        <v-list class="bg-surface rounded-lg elevation-4" density="compact">
+        <v-list class="menu-blur rounded-lg elevation-8" density="compact">
           <v-list-item @click="performAction('restart')" class="text-warning">
             <template v-slot:prepend><v-icon size="small">mdi-restart</v-icon></template>
             <v-list-item-title class="text-body-2">Force Restart</v-list-item-title>
