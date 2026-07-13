@@ -49,10 +49,10 @@
         <v-divider v-else class="my-3 mx-2 border-opacity-25" color="white"></v-divider>
         <v-list-item prepend-icon="mdi-git" title="Repositories" to="/git/repositories" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-sync" title="Git Syncs" to="/git/syncs" rounded="lg"></v-list-item>
+        <v-list-item prepend-icon="mdi-history" title="Sync History" to="/git/history" rounded="lg"></v-list-item>
 
         <v-list-subheader v-if="!rail" class="text-uppercase font-weight-bold text-caption text-primary mt-4 mb-1">Settings</v-list-subheader>
         <v-divider v-else class="my-3 mx-2 border-opacity-25" color="white"></v-divider>
-        <v-list-item prepend-icon="mdi-palette" title="Appearance" to="/settings/appearance" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-cog" title="Git" to="/settings/git" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-database-lock" title="Registries" to="/swarm/registries" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-history" title="Events" to="/settings/events" rounded="lg"></v-list-item>
@@ -87,9 +87,22 @@
           </v-badge>
         </v-btn>
         
-        <v-avatar size="36" color="primary" variant="tonal" class="cursor-pointer" style="border: 2px solid rgba(139, 92, 246, 0.5)">
-          <span class="text-caption font-weight-bold">LE</span>
-        </v-avatar>
+        <v-menu>
+          <template v-slot:activator="{ props }">
+            <v-avatar v-bind="props" size="36" color="primary" variant="tonal" class="cursor-pointer" style="border: 2px solid rgba(139, 92, 246, 0.5)">
+              <span class="text-caption font-weight-bold">{{ userInitials }}</span>
+            </v-avatar>
+          </template>
+          <v-list class="mt-2 menu-blur" elevation="8" rounded="lg">
+            <v-list-item to="/settings/profile" prepend-icon="mdi-account-cog-outline" value="profile">
+              <v-list-item-title class="text-caption">Profile Settings</v-list-item-title>
+            </v-list-item>
+            <v-divider class="my-1 border-opacity-25" color="white"></v-divider>
+            <v-list-item @click="handleLogout" prepend-icon="mdi-logout" value="logout">
+              <v-list-item-title class="text-caption text-error">Logout</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
       </div>
     </v-app-bar>
 
@@ -109,45 +122,59 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
+const router = useRouter()
 const drawer = ref(true)
 const rail = ref(true)
+const userInitials = ref('??')
 
 // Check if we are currently on an auth page (Login or Onboarding)
 const isAuthPage = computed(() => {
   return route.path === '/login' || route.path === '/onboarding'
 })
 
-const fetchThemeSettings = async () => {
-  try {
-    const res = await fetch("/api/settings");
-    if (res.ok) {
-      const settings = await res.json();
-      if (settings.log_colors) {
+const loadUser = () => {
+  const userStr = localStorage.getItem('halyard_user');
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      if (user.real_name) {
+        userInitials.value = user.real_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
+      } else if (user.username) {
+        userInitials.value = user.username.substring(0, 2).toUpperCase();
+      }
+      
+      if (user.preferences) {
         const root = document.documentElement;
-        for (const [key, value] of Object.entries(settings.log_colors)) {
+        for (const [key, value] of Object.entries(user.preferences)) {
           if (value) {
-            root.style.setProperty(`--ansi-${key}`, value as string);
+            root.style.setProperty(`--${key}`, value as string);
           }
         }
       }
+    } catch (e) {
+      console.error("Failed to parse user", e);
     }
-  } catch (err) {
-    console.error("Failed to load settings", err);
   }
+}
+
+const handleLogout = () => {
+  localStorage.removeItem('halyard_token');
+  localStorage.removeItem('halyard_user');
+  router.push('/login');
 }
 
 onMounted(() => {
   if (!isAuthPage.value) {
-    fetchThemeSettings();
+    loadUser();
   }
 });
 
 watch(isAuthPage, (newVal) => {
   if (!newVal) {
-    fetchThemeSettings();
+    loadUser();
   }
 });
 </script>

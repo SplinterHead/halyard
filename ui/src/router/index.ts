@@ -99,10 +99,11 @@ const routes = [
     component: () => import("../views/git/SyncsView.vue"),
   },
   {
-    path: "/settings/appearance",
-    name: "appearance",
-    component: () => import("../views/settings/SettingsAppearanceView.vue"),
+    path: "/settings/profile",
+    name: "profile",
+    component: () => import("../views/settings/ProfileView.vue"),
   },
+
   {
     path: "/settings/git",
     name: "settings-git",
