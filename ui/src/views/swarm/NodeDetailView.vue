@@ -197,7 +197,10 @@
             icon="mdi-restart"
             class="mb-4"
           >
-            This node has pending system updates and requires a restart.
+            <div class="d-flex justify-space-between align-center w-100">
+              <span>This node has pending system updates and requires a restart.</span>
+              <v-btn size="small" color="warning" variant="elevated" :loading="isRebootingHost" @click="triggerHostReboot">Reboot Now</v-btn>
+            </div>
           </v-alert>
           <v-alert
             v-else-if="node.pending_updates > 0"
@@ -206,7 +209,10 @@
             icon="mdi-package-down"
             class="mb-4"
           >
-            There are <strong>{{ node.pending_updates }}</strong> package updates available for this node.
+            <div class="d-flex justify-space-between align-center w-100">
+              <span>There are <strong>{{ node.pending_updates }}</strong> package updates available for this node.</span>
+              <v-btn size="small" color="info" variant="elevated" :loading="isUpdatingHost" @click="triggerHostUpdate">Run Updates</v-btn>
+            </div>
           </v-alert>
         </v-col>
 
@@ -339,6 +345,39 @@ const confirmDialog = ref({
   color: 'primary',
   payload: {} as any
 })
+
+const isUpdatingHost = ref(false)
+const isRebootingHost = ref(false)
+
+const triggerHostUpdate = async () => {
+  if (!node.value) return
+  isUpdatingHost.value = true
+  try {
+    const response = await fetch(`/api/nodes/host/update?id=${node.value.node_id}`, { method: 'POST' })
+    if (!response.ok) {
+      console.error('Failed to trigger host update:', await response.text())
+    }
+  } catch (err) {
+    console.error('Failed to trigger host update:', err)
+  } finally {
+    isUpdatingHost.value = false
+  }
+}
+
+const triggerHostReboot = async () => {
+  if (!node.value) return
+  isRebootingHost.value = true
+  try {
+    const response = await fetch(`/api/nodes/host/reboot?id=${node.value.node_id}`, { method: 'POST' })
+    if (!response.ok) {
+      console.error('Failed to trigger host reboot:', await response.text())
+    }
+  } catch (err) {
+    console.error('Failed to trigger host reboot:', err)
+  } finally {
+    isRebootingHost.value = false
+  }
+}
 
 const triggerSwarmAction = (action: 'drain' | 'activate' | 'promote' | 'demote') => {
   if (!node.value) return

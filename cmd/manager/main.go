@@ -399,6 +399,45 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	http.HandleFunc("/api/nodes/host/update", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "Node ID is required", http.StatusBadRequest)
+			return
+		}
+
+		if err := nodeMgr.HostUpdate(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	http.HandleFunc("/api/nodes/host/reboot", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "Node ID is required", http.StatusBadRequest)
+			return
+		}
+
+		if err := nodeMgr.HostReboot(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusAccepted)
+	})
 
 	http.HandleFunc("/api/stacks", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {

@@ -307,3 +307,45 @@ func (m *NodeManager) PruneCluster(ctx context.Context, req api.PruneRequest) er
 	log.Println("Cluster-wide prune completed")
 	return nil
 }
+
+func (m *NodeManager) HostUpdate(ctx context.Context, nodeID string) error {
+	agentIP, err := m.getAgentIPForNode(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("http://%s:9090/host/update", agentIP)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return agentclient.ParseError(resp, http.StatusAccepted)
+}
+
+func (m *NodeManager) HostReboot(ctx context.Context, nodeID string) error {
+	agentIP, err := m.getAgentIPForNode(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("http://%s:9090/host/reboot", agentIP)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return agentclient.ParseError(resp, http.StatusAccepted)
+}

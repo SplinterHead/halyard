@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -392,6 +393,44 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/host/update", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		
+		log.Println("Received request to run host updates via nsenter")
+		go func() {
+			cmd := exec.Command("nsenter", "-t", "1", "-m", "-u", "-n", "-i", "bash", "-c", "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				log.Printf("Error running host update: %v\nOutput: %s", err, string(out))
+			} else {
+				log.Printf("Host update completed successfully")
+			}
+		}()
+		
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	http.HandleFunc("/host/reboot", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		
+		log.Println("Received request to reboot host via nsenter")
+		go func() {
+			cmd := exec.Command("nsenter", "-t", "1", "-m", "-u", "-n", "-i", "reboot")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				log.Printf("Error running host reboot: %v\nOutput: %s", err, string(out))
+			}
+		}()
+		
+		w.WriteHeader(http.StatusAccepted)
 	})
 
 	log.Println("Agent listening on :9090")
