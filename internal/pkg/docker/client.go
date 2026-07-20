@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -95,7 +96,19 @@ func BuildFilters(m map[string]string) filters.Args {
 func (c *Client) RunHostCommand(ctx context.Context, command string) (string, error) {
 	imageName := os.Getenv("AGENT_IMAGE")
 	if imageName == "" {
-		imageName = "halyard-agent:latest"
+		// Dynamically discover the agent's image by finding a running agent container
+		containers, err := c.ContainerList(ctx, container.ListOptions{})
+		if err == nil {
+			for _, cnt := range containers {
+				if strings.Contains(cnt.Image, "halyard-agent") {
+					imageName = cnt.Image
+					break
+				}
+			}
+		}
+		if imageName == "" {
+			imageName = "halyard-agent:latest"
+		}
 	}
 
 	resp, err := c.ContainerCreate(ctx, &container.Config{
