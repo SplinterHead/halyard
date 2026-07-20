@@ -94,20 +94,16 @@ func BuildFilters(m map[string]string) filters.Args {
 
 // RunHostCommand creates an ephemeral privileged container to execute a command on the host.
 func (c *Client) RunHostCommand(ctx context.Context, command string) (string, error) {
-	imageName := os.Getenv("AGENT_IMAGE")
-	if imageName == "" {
-		// Dynamically discover the agent's image by finding a running agent container
-		containers, err := c.ContainerList(ctx, container.ListOptions{})
-		if err == nil {
-			for _, cnt := range containers {
-				if strings.Contains(cnt.Image, "halyard-agent") {
-					imageName = cnt.Image
-					break
-				}
+	imageName := "halyard-agent:latest"
+	
+	// Dynamically discover the agent's image by finding a running agent container
+	containers, err := c.ContainerList(ctx, container.ListOptions{})
+	if err == nil {
+		for _, cnt := range containers {
+			if strings.Contains(cnt.Image, "halyard-agent") {
+				imageName = cnt.Image
+				break
 			}
-		}
-		if imageName == "" {
-			imageName = "halyard-agent:latest"
 		}
 	}
 

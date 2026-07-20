@@ -19,7 +19,6 @@ services:
   agent:
     image: splinterhead27/halyard-agent:latest
     environment:
-      AGENT_IMAGE: splinterhead27/halyard-agent:latest
       HOST_PROC: /host/proc
       HOST_SYS: /host/sys
       HOST_ETC: /host/etc
