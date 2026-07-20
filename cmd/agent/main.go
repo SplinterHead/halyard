@@ -69,7 +69,7 @@ func main() {
 				return
 			case stats := <-statsChan:
 				if err := conn.WriteJSON(stats); err != nil {
-					log.Printf("Error writing stats to websocket: %v", err)
+					// Client disconnected (e.g. manager dropped connection)
 					return
 				}
 			}

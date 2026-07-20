@@ -98,7 +98,7 @@ func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
 	return result, nil
 }
 
-func (m *NodeManager) StreamStatsWS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (m *NodeManager) StreamStatsWS(parentCtx context.Context, w http.ResponseWriter, r *http.Request) error {
 	var upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
@@ -108,10 +108,21 @@ func (m *NodeManager) StreamStatsWS(ctx context.Context, w http.ResponseWriter, 
 	}
 	defer clientConn.Close()
 
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
+	// Detect client disconnect immediately
+	go func() {
+		defer cancel()
+		for {
+			if _, _, err := clientConn.NextReader(); err != nil {
+				break
+			}
+		}
+	}()
+
 	// Get active agents from directory
 	activeAgents := m.agentDir.GetAllAgents()
-
-	errChan := make(chan error, 1)
 	mu := sync.Mutex{}
 
 	for _, agent := range activeAgents {
@@ -124,34 +135,35 @@ func (m *NodeManager) StreamStatsWS(ctx context.Context, w http.ResponseWriter, 
 			}
 			defer agentConn.Close()
 
+			// Force ReadJSON to exit when context is cancelled
+			go func() {
+				<-ctx.Done()
+				agentConn.Close()
+			}()
+
 			for {
 				var stats api.NodeStats
 				err := agentConn.ReadJSON(&stats)
 				if err != nil {
-					log.Printf("Error reading stats from agent %s: %v", agentIP, err)
-					return
+					return // Exits gracefully on close or error
 				}
 
 				stats.NodeID = id // Inject NodeID so UI can map it
 				stats.Timestamp = time.Now()
 
 				mu.Lock()
-				if err := clientConn.WriteJSON(stats); err != nil {
-					mu.Unlock()
-					errChan <- err
+				err = clientConn.WriteJSON(stats)
+				mu.Unlock()
+				if err != nil {
+					cancel() // Signal all other goroutines to stop
 					return
 				}
-				mu.Unlock()
 			}
 		}(agent.IP, agent.NodeID)
 	}
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-errChan:
-		return err
-	}
+	<-ctx.Done()
+	return nil
 }
 
 func (m *NodeManager) GetNodeDetail(ctx context.Context, id string) (api.NodeDetail, error) {
