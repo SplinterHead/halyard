@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"os"
-	"regexp"
+	"os/exec"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/SplinterHead/halyard/api"
@@ -15,43 +17,41 @@ import (
 )
 
 type StatsCollector struct {
-	docker *docker.Client
+	docker          *docker.Client
+	pendingUpdates  atomic.Int32
+	restartRequired atomic.Bool
 }
 
 func NewStatsCollector(cli *docker.Client) *StatsCollector {
-	return &StatsCollector{docker: cli}
+	s := &StatsCollector{docker: cli}
+	go s.pollHostUpdates()
+	return s
 }
 
-func checkPendingRestart() bool {
-	if _, err := os.Stat("/host/run/reboot-required"); err == nil {
-		return true
+func (s *StatsCollector) pollHostUpdates() {
+	s.checkHostUpdates()
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.checkHostUpdates()
 	}
-	if _, err := os.Stat("/host/run/reboot-required.pkgs"); err == nil {
-		return true
-	}
-	return false
 }
 
-func checkPendingUpdates() int {
-	data, err := os.ReadFile("/host/var/lib/update-notifier/updates-available")
+func (s *StatsCollector) checkHostUpdates() {
+	// Check for updates
+	cmd := exec.Command("nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", "apt list --upgradable 2>/dev/null | grep -v Listing | wc -l")
+	out, err := cmd.Output()
 	if err == nil {
-		// Try parsing standard Ubuntu message
-		re := regexp.MustCompile(`(?m)^(\d+)\s+updates?`)
-		matches := re.FindStringSubmatch(string(data))
-		if len(matches) > 1 {
-			count, _ := strconv.Atoi(matches[1])
-			return count
-		}
-
-		// Try parsing alternative package message
-		rePkg := regexp.MustCompile(`(?m)^(\d+)\s+packages?`)
-		matchesPkg := rePkg.FindStringSubmatch(string(data))
-		if len(matchesPkg) > 1 {
-			count, _ := strconv.Atoi(matchesPkg[1])
-			return count
+		count, err := strconv.Atoi(strings.TrimSpace(string(out)))
+		if err == nil {
+			s.pendingUpdates.Store(int32(count))
 		}
 	}
-	return 0
+
+	// Check for reboot requirement
+	cmdReboot := exec.Command("nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", "test -f /run/reboot-required || test -f /run/reboot-required.pkgs")
+	errReboot := cmdReboot.Run()
+	s.restartRequired.Store(errReboot == nil)
 }
 
 func (s *StatsCollector) GetNodeStats(ctx context.Context) (api.NodeStats, error) {
@@ -86,8 +86,8 @@ func (s *StatsCollector) GetNodeStats(ctx context.Context) (api.NodeStats, error
 		MemoryUsage:     vm.Used,
 		MemoryTotal:     vm.Total,
 		Uptime:          h.Uptime,
-		PendingUpdates:  checkPendingUpdates(),
-		RestartRequired: checkPendingRestart(),
+		PendingUpdates:  int(s.pendingUpdates.Load()),
+		RestartRequired: s.restartRequired.Load(),
 	}, nil
 }
 

@@ -6,6 +6,7 @@ RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o agent ./cmd/agent/main.g
 
 # Stage 2: Final Image
 FROM alpine:latest
+RUN apk add --no-cache util-linux
 WORKDIR /app
 COPY --from=builder /app/agent .
 EXPOSE 9090
