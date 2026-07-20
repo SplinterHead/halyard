@@ -60,8 +60,23 @@
         @click:row="goToDetail"
         items-per-page="25"
       >
-        <template v-slot:item.hostname="{ value }">
-          <span class="text-body-2 font-weight-bold">{{ value }}</span>
+        <template v-slot:item.hostname="{ item, value }">
+          <div class="d-flex align-center gap-2">
+            <span class="text-body-2 font-weight-bold">{{ value }}</span>
+            <v-badge
+              v-if="item.pending_updates > 0"
+              color="info"
+              :content="item.pending_updates"
+              inline
+            >
+              <v-icon size="small" color="info">mdi-package-down</v-icon>
+            </v-badge>
+            <v-tooltip v-if="item.restart_required" text="Restart required" location="top">
+              <template v-slot:activator="{ props }">
+                <v-icon v-bind="props" size="small" color="warning" class="ms-1">mdi-restart</v-icon>
+              </template>
+            </v-tooltip>
+          </div>
         </template>
 
         <template v-slot:item.role="{ value }">
@@ -214,6 +229,8 @@ interface NodeStats {
   memory_usage: number
   memory_total: number
   uptime: number
+  pending_updates: number
+  restart_required: boolean
 }
 
 const nodes = ref<NodeStats[]>([])
@@ -314,6 +331,8 @@ const setupStatsStream = () => {
         node.memory_usage = stats.memory_usage;
         node.memory_total = stats.memory_total;
         node.uptime = stats.uptime;
+        node.pending_updates = stats.pending_updates;
+        node.restart_required = stats.restart_required;
       }
     } catch (e) {
       console.error('Failed to parse stats message:', e);

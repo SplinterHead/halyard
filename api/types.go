@@ -28,9 +28,11 @@ type NodeStats struct {
 	CPUUsage     float64   `json:"cpu_usage"`
 	MemoryUsage  uint64    `json:"memory_usage"`
 	MemoryTotal  uint64    `json:"memory_total"`
-	DiskUsage    uint64    `json:"disk_usage"`
-	Uptime       uint64    `json:"uptime"`
-	Timestamp    time.Time `json:"timestamp"`
+	DiskUsage       uint64    `json:"disk_usage"`
+	Uptime          uint64    `json:"uptime"`
+	PendingUpdates  int       `json:"pending_updates"`
+	RestartRequired bool      `json:"restart_required"`
+	Timestamp       time.Time `json:"timestamp"`
 }
 
 type NodeDetail struct {

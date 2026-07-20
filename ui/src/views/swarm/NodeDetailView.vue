@@ -189,6 +189,27 @@
 
     <v-container v-if="node" fluid class="pa-0 flex-grow-1 overflow-y-auto">
       <v-row class="px-4">
+        <v-col cols="12" class="pb-0" v-if="node.restart_required || node.pending_updates > 0">
+          <v-alert
+            v-if="node.restart_required"
+            type="warning"
+            variant="tonal"
+            icon="mdi-restart"
+            class="mb-4"
+          >
+            This node has pending system updates and requires a restart.
+          </v-alert>
+          <v-alert
+            v-else-if="node.pending_updates > 0"
+            type="info"
+            variant="tonal"
+            icon="mdi-package-down"
+            class="mb-4"
+          >
+            There are <strong>{{ node.pending_updates }}</strong> package updates available for this node.
+          </v-alert>
+        </v-col>
+
         <!-- Technical Details -->
         <v-col cols="12">
           <v-card class="glass-card pa-4 mb-4" elevation="0">
@@ -499,6 +520,8 @@ const setupStatsStream = () => {
         node.value.memory_usage = stats.memory_usage;
         node.value.memory_total = stats.memory_total;
         node.value.uptime = stats.uptime;
+        node.value.pending_updates = stats.pending_updates;
+        node.value.restart_required = stats.restart_required;
 
         // Update charts in real-time
         if (historyCharts.value) {

@@ -3,6 +3,9 @@ package agent
 import (
 	"context"
 	"os"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/SplinterHead/halyard/api"
@@ -18,6 +21,38 @@ type StatsCollector struct {
 
 func NewStatsCollector(cli *docker.Client) *StatsCollector {
 	return &StatsCollector{docker: cli}
+}
+
+func checkPendingRestart() bool {
+	if _, err := os.Stat("/host/var/run/reboot-required"); err == nil {
+		return true
+	}
+	if _, err := os.Stat("/host/var/run/reboot-required.pkgs"); err == nil {
+		return true
+	}
+	return false
+}
+
+func checkPendingUpdates() int {
+	data, err := os.ReadFile("/host/var/lib/update-notifier/updates-available")
+	if err == nil {
+		// Try parsing standard Ubuntu message
+		re := regexp.MustCompile(`(?m)^(\d+)\s+updates?`)
+		matches := re.FindStringSubmatch(string(data))
+		if len(matches) > 1 {
+			count, _ := strconv.Atoi(matches[1])
+			return count
+		}
+
+		// Try parsing alternative package message
+		rePkg := regexp.MustCompile(`(?m)^(\d+)\s+packages?`)
+		matchesPkg := rePkg.FindStringSubmatch(string(data))
+		if len(matchesPkg) > 1 {
+			count, _ := strconv.Atoi(matchesPkg[1])
+			return count
+		}
+	}
+	return 0
 }
 
 func (s *StatsCollector) GetNodeStats(ctx context.Context) (api.NodeStats, error) {
@@ -47,11 +82,13 @@ func (s *StatsCollector) GetNodeStats(ctx context.Context) (api.NodeStats, error
 	}
 
 	return api.NodeStats{
-		Hostname:    hostname,
-		CPUUsage:    cpuUsage,
-		MemoryUsage: vm.Used,
-		MemoryTotal: vm.Total,
-		Uptime:      h.Uptime,
+		Hostname:        hostname,
+		CPUUsage:        cpuUsage,
+		MemoryUsage:     vm.Used,
+		MemoryTotal:     vm.Total,
+		Uptime:          h.Uptime,
+		PendingUpdates:  checkPendingUpdates(),
+		RestartRequired: checkPendingRestart(),
 	}, nil
 }
 
