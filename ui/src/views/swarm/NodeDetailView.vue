@@ -7,7 +7,7 @@
         <h1 class="text-h4 font-weight-bold">{{ node?.hostname || 'Node Detail' }}</h1>
         <div class="d-flex align-center mt-1">
           <v-chip size="x-small" :color="statusColor" class="text-uppercase">{{ node?.status }}</v-chip>
-          <span class="text-caption text-grey ms-2">{{ node?.node_id }}</span>
+          <span class="text-caption text-grey ms-2"><code>{{ node?.node_id }}</code></span>
         </div>
         
         <div class="d-flex align-center mt-2 flex-wrap gap-2">
@@ -188,7 +188,7 @@
       <v-card class="solid-card pa-6">
         <v-card-title class="text-h6 font-weight-bold px-0 pb-4">Reboot Node</v-card-title>
         <v-card-text class="pa-0 text-body-1">
-          Are you sure you want to reboot node "{{ node?.hostname }}"? 
+          Are you sure you want to reboot node <code>{{ node?.hostname }}</code>? 
           <br><br>
           We recommend draining the node first to safely reschedule its active containers.
         </v-card-text>
@@ -217,9 +217,8 @@
 
     <v-container v-if="node" fluid class="pa-0 flex-grow-1 overflow-y-auto">
       <v-row class="px-4">
-        <v-col cols="12" class="pb-0" v-if="node.restart_required || node.pending_updates > 0">
+        <v-col cols="12" :md="(node.restart_required && node.pending_updates > 0) ? 6 : 12" class="pb-0" v-if="node.restart_required">
           <v-alert
-            v-if="node.restart_required"
             type="warning"
             variant="tonal"
             icon="mdi-restart"
@@ -230,8 +229,9 @@
               <v-btn size="small" color="warning" variant="elevated" @click="rebootDialog.show = true">Reboot Now</v-btn>
             </div>
           </v-alert>
+        </v-col>
+        <v-col cols="12" :md="(node.restart_required && node.pending_updates > 0) ? 6 : 12" class="pb-0" v-if="node.pending_updates > 0">
           <v-alert
-            v-else-if="node.pending_updates > 0"
             type="info"
             variant="tonal"
             icon="mdi-package-down"
