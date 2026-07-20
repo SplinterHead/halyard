@@ -30,7 +30,7 @@
           <h3 class="text-h6 font-weight-bold mb-4">Change Password</h3>
           <v-divider class="mb-6 border-opacity-25" color="white"></v-divider>
 
-          <v-form @submit.prevent="handlePasswordUpdate" v-model="formValid">
+          <v-form ref="passwordForm" @submit.prevent="handlePasswordUpdate" v-model="formValid">
             <v-alert
               v-if="statusMessage"
               :type="statusType"
@@ -186,8 +186,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 
+const passwordForm = ref<any>(null)
 const user = ref<any>({})
 const userInitials = ref('??')
 
@@ -281,6 +282,10 @@ const handlePasswordUpdate = async () => {
     currentPassword.value = ''
     newPassword.value = ''
     confirmPassword.value = ''
+    
+    nextTick(() => {
+      passwordForm.value?.resetValidation()
+    })
   } catch (err: any) {
     console.error('Password update failed:', err)
     statusType.value = 'error'

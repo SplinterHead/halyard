@@ -81,12 +81,6 @@
       
       <!-- Premium App Bar Actions -->
       <div class="d-flex align-center gap-2 pe-4">
-        <v-btn icon variant="tonal" color="primary" class="me-2" size="small">
-          <v-badge dot color="error">
-            <v-icon>mdi-bell-outline</v-icon>
-          </v-badge>
-        </v-btn>
-        
         <v-menu>
           <template v-slot:activator="{ props }">
             <v-avatar v-bind="props" size="36" color="primary" variant="tonal" class="cursor-pointer" style="border: 2px solid rgba(139, 92, 246, 0.5)">
