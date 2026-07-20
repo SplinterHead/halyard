@@ -60,20 +60,20 @@
         @click:row="goToDetail"
         items-per-page="25"
       >
-        <template v-slot:item.hostname="{ item, value }">
-          <div class="d-flex align-center gap-2">
-            <span class="text-body-2 font-weight-bold">{{ value }}</span>
-            <v-badge
-              v-if="item.pending_updates > 0"
-              color="info"
-              :content="item.pending_updates"
-              inline
-            >
-              <v-icon size="small" color="info">mdi-package-down</v-icon>
-            </v-badge>
+        <template v-slot:item.hostname="{ value }">
+          <span class="text-body-2 font-weight-bold">{{ value }}</span>
+        </template>
+
+        <template v-slot:item.alerts="{ item }">
+          <div class="d-flex align-center justify-end gap-2">
+            <v-tooltip v-if="item.pending_updates > 0" text="Updates available" location="top">
+              <template v-slot:activator="{ props }">
+                <v-icon v-bind="props" size="small" color="info">mdi-package-down</v-icon>
+              </template>
+            </v-tooltip>
             <v-tooltip v-if="item.restart_required" text="Restart required" location="top">
               <template v-slot:activator="{ props }">
-                <v-icon v-bind="props" size="small" color="warning" class="ms-1">mdi-restart</v-icon>
+                <v-icon v-bind="props" size="small" color="warning">mdi-restart</v-icon>
               </template>
             </v-tooltip>
           </div>
@@ -288,6 +288,7 @@ const getRowProps = ({ item }: any) => {
 
 const headers = [
   { title: "Hostname", key: "hostname", sortable: true, align: "start" as const },
+  { title: "", key: "alerts", sortable: false, align: "end" as const, width: "60px" },
   { title: "Role", key: "role", width: "100px", align: "center" as const },
   { title: 'IP', key: 'ip', align: 'start' as const },
   { title: 'CPU', key: 'cpu_usage', align: 'start' as const },
