@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -38,19 +37,20 @@ func (s *StatsCollector) pollHostUpdates() {
 }
 
 func (s *StatsCollector) checkHostUpdates() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
 	// Check for updates
-	cmd := exec.Command("nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", "apt list --upgradable 2>/dev/null | grep -v Listing | wc -l")
-	out, err := cmd.Output()
+	out, err := s.docker.RunHostCommand(ctx, "apt list --upgradable 2>/dev/null | grep -v Listing | wc -l")
 	if err == nil {
-		count, err := strconv.Atoi(strings.TrimSpace(string(out)))
+		count, err := strconv.Atoi(strings.TrimSpace(out))
 		if err == nil {
 			s.pendingUpdates.Store(int32(count))
 		}
 	}
 
 	// Check for reboot requirement
-	cmdReboot := exec.Command("nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", "test -f /run/reboot-required || test -f /run/reboot-required.pkgs")
-	errReboot := cmdReboot.Run()
+	_, errReboot := s.docker.RunHostCommand(ctx, "test -f /run/reboot-required || test -f /run/reboot-required.pkgs")
 	s.restartRequired.Store(errReboot == nil)
 }
 

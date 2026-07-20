@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -403,8 +402,9 @@ func main() {
 		
 		log.Println("Received request to run host updates via nsenter")
 		go func() {
-			cmd := exec.Command("nsenter", "-t", "1", "-m", "-u", "-n", "-i", "bash", "-c", "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y")
-			out, err := cmd.CombinedOutput()
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+			defer cancel()
+			out, err := cli.RunHostCommand(ctx, "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y")
 			if err != nil {
 				log.Printf("Error running host update: %v\nOutput: %s", err, string(out))
 			} else {
@@ -423,8 +423,9 @@ func main() {
 		
 		log.Println("Received request to reboot host via nsenter")
 		go func() {
-			cmd := exec.Command("nsenter", "-t", "1", "-m", "-u", "-n", "-i", "reboot")
-			out, err := cmd.CombinedOutput()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			out, err := cli.RunHostCommand(ctx, "reboot")
 			if err != nil {
 				log.Printf("Error running host reboot: %v\nOutput: %s", err, string(out))
 			}

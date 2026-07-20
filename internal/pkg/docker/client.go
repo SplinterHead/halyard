@@ -1,8 +1,12 @@
 package docker
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
+
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -84,4 +88,59 @@ func BuildFilters(m map[string]string) filters.Args {
 		args.Add(k, v)
 	}
 	return args
+}
+
+// RunHostCommand creates an ephemeral privileged container to execute a command on the host.
+func (c *Client) RunHostCommand(ctx context.Context, command string) (string, error) {
+	resp, err := c.ContainerCreate(ctx, &container.Config{
+		Image: "halyard-agent:latest",
+		Cmd:   []string{"nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", command},
+		Tty:   false,
+	}, &container.HostConfig{
+		Privileged: true,
+		PidMode:    "host",
+	}, nil, nil, "")
+	if err != nil {
+		return "", err
+	}
+
+	if err := c.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		return "", err
+	}
+
+	statusCh, errCh := c.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+	
+	var exitCode int64
+	select {
+	case err := <-errCh:
+		if err != nil {
+			c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			return "", err
+		}
+	case status := <-statusCh:
+		if status.Error != nil {
+			c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			return "", fmt.Errorf(status.Error.Message)
+		}
+		exitCode = status.StatusCode
+	}
+
+	out, err := c.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+	if err != nil {
+		c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		return "", err
+	}
+	defer out.Close()
+
+	buf := new(bytes.Buffer)
+	stdcopy.StdCopy(buf, buf, out) // demux docker logs
+
+	c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+
+	if exitCode != 0 {
+		return buf.String(), fmt.Errorf("exit code %d", exitCode)
+	}
+
+	return buf.String(), nil
 }
