@@ -431,6 +431,16 @@ func main() {
 			return
 		}
 
+		drain := r.URL.Query().Get("drain") == "true"
+		if drain {
+			log.Printf("Draining node %s before reboot", id)
+			if err := nodeMgr.UpdateNode(r.Context(), id, "drain", ""); err != nil {
+				log.Printf("Failed to drain node %s: %v", id, err)
+				http.Error(w, "Failed to drain node: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
 		if err := nodeMgr.HostReboot(r.Context(), id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

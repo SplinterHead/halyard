@@ -183,6 +183,34 @@
       </v-card>
     </v-dialog>
 
+    <!-- Reboot Confirmation Dialog -->
+    <v-dialog v-model="rebootDialog.show" max-width="450">
+      <v-card class="solid-card pa-6">
+        <v-card-title class="text-h6 font-weight-bold px-0 pb-4">Reboot Node</v-card-title>
+        <v-card-text class="pa-0 text-body-1">
+          Are you sure you want to reboot node "{{ node?.hostname }}"? 
+          <br><br>
+          We recommend draining the node first to safely reschedule its active containers.
+        </v-card-text>
+        <v-card-actions class="px-0 pt-6">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" color="grey" @click="rebootDialog.show = false">Cancel</v-btn>
+          <v-btn
+            variant="tonal"
+            color="error"
+            :loading="isRebootingHost && !rebootDialog.draining"
+            @click="executeHostReboot(false)"
+          >Reboot Immediately</v-btn>
+          <v-btn
+            variant="flat"
+            color="warning"
+            :loading="isRebootingHost && rebootDialog.draining"
+            @click="executeHostReboot(true)"
+          >Drain & Reboot</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-divider class="mb-6"></v-divider>
 
     <Loader :loading="loading && !node" />
@@ -199,7 +227,7 @@
           >
             <div class="d-flex justify-space-between align-center w-100">
               <span>This node has pending system updates and requires a restart.</span>
-              <v-btn size="small" color="warning" variant="elevated" :loading="isRebootingHost" @click="triggerHostReboot">Reboot Now</v-btn>
+              <v-btn size="small" color="warning" variant="elevated" @click="rebootDialog.show = true">Reboot Now</v-btn>
             </div>
           </v-alert>
           <v-alert
@@ -348,6 +376,10 @@ const confirmDialog = ref({
 
 const isUpdatingHost = ref(false)
 const isRebootingHost = ref(false)
+const rebootDialog = ref({
+  show: false,
+  draining: false
+})
 
 const triggerHostUpdate = async () => {
   if (!node.value) return
@@ -364,13 +396,20 @@ const triggerHostUpdate = async () => {
   }
 }
 
-const triggerHostReboot = async () => {
+const executeHostReboot = async (drain: boolean) => {
   if (!node.value) return
   isRebootingHost.value = true
+  rebootDialog.value.draining = drain
   try {
-    const response = await fetch(`/api/nodes/host/reboot?id=${node.value.node_id}`, { method: 'POST' })
+    const url = `/api/nodes/host/reboot?id=${node.value.node_id}${drain ? '&drain=true' : ''}`
+    const response = await fetch(url, { method: 'POST' })
     if (!response.ok) {
       console.error('Failed to trigger host reboot:', await response.text())
+    } else {
+      rebootDialog.value.show = false
+      if (drain) {
+        node.value.availability = 'drain'
+      }
     }
   } catch (err) {
     console.error('Failed to trigger host reboot:', err)
