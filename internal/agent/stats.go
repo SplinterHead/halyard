@@ -5,7 +5,6 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/SplinterHead/halyard/api"
@@ -24,10 +23,10 @@ func NewStatsCollector(cli *docker.Client) *StatsCollector {
 }
 
 func checkPendingRestart() bool {
-	if _, err := os.Stat("/host/var/run/reboot-required"); err == nil {
+	if _, err := os.Stat("/host/run/reboot-required"); err == nil {
 		return true
 	}
-	if _, err := os.Stat("/host/var/run/reboot-required.pkgs"); err == nil {
+	if _, err := os.Stat("/host/run/reboot-required.pkgs"); err == nil {
 		return true
 	}
 	return false
