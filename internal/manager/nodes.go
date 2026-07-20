@@ -77,6 +77,8 @@ func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
 						stats.MemoryUsage = agentStats.MemoryUsage
 						stats.MemoryTotal = agentStats.MemoryTotal
 						stats.Uptime = agentStats.Uptime
+						stats.PendingUpdates = agentStats.PendingUpdates
+						stats.RestartRequired = agentStats.RestartRequired
 						log.Printf("Successfully received stats for node %s (%s)", n.ID, stats.Hostname)
 					} else {
 						log.Printf("Failed to decode stats from agent %s: %v", ip, err)
@@ -193,6 +195,8 @@ func (m *NodeManager) GetNodeDetail(ctx context.Context, id string) (api.NodeDet
 				detail.MemoryUsage = agentStats.MemoryUsage
 				detail.MemoryTotal = agentStats.MemoryTotal
 				detail.Uptime = agentStats.Uptime
+				detail.PendingUpdates = agentStats.PendingUpdates
+				detail.RestartRequired = agentStats.RestartRequired
 			}
 		}
 	}

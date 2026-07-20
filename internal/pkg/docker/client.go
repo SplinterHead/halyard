@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -92,8 +93,13 @@ func BuildFilters(m map[string]string) filters.Args {
 
 // RunHostCommand creates an ephemeral privileged container to execute a command on the host.
 func (c *Client) RunHostCommand(ctx context.Context, command string) (string, error) {
+	imageName := os.Getenv("AGENT_IMAGE")
+	if imageName == "" {
+		imageName = "halyard-agent:latest"
+	}
+
 	resp, err := c.ContainerCreate(ctx, &container.Config{
-		Image: "halyard-agent:latest",
+		Image: imageName,
 		Cmd:   []string{"nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", command},
 		Tty:   false,
 	}, &container.HostConfig{
