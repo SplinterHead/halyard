@@ -40,18 +40,27 @@ func (s *StatsCollector) checkHostUpdates() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
+	log.Println("Running host update and reboot checks...")
+
 	// Check for updates
 	out, err := s.docker.RunHostCommand(ctx, "apt list --upgradable 2>/dev/null | grep -v Listing | wc -l")
 	if err == nil {
 		count, err := strconv.Atoi(strings.TrimSpace(out))
 		if err == nil {
 			s.pendingUpdates.Store(int32(count))
+			log.Printf("Host updates check completed: %d pending updates found", count)
+		} else {
+			log.Printf("Host updates check failed to parse count '%s': %v", out, err)
 		}
+	} else {
+		log.Printf("Host updates check failed to execute command: %v (output: %s)", err, out)
 	}
 
 	// Check for reboot requirement
-	_, errReboot := s.docker.RunHostCommand(ctx, "test -f /run/reboot-required || test -f /run/reboot-required.pkgs")
-	s.restartRequired.Store(errReboot == nil)
+	outReboot, errReboot := s.docker.RunHostCommand(ctx, "test -f /run/reboot-required || test -f /run/reboot-required.pkgs")
+	requiresReboot := errReboot == nil
+	s.restartRequired.Store(requiresReboot)
+	log.Printf("Host reboot check completed: requires_reboot=%v (err: %v, output: %s)", requiresReboot, errReboot, outReboot)
 }
 
 func (s *StatsCollector) ListPendingUpdates(ctx context.Context) ([]string, error) {
