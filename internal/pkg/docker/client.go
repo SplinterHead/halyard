@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -93,19 +92,37 @@ func BuildFilters(m map[string]string) filters.Args {
 }
 
 // RunHostCommand creates an ephemeral privileged container to execute a command on the host.
-func (c *Client) RunHostCommand(ctx context.Context, command string) (string, error) {
+func (c *Client) getAgentImage(ctx context.Context) string {
 	imageName := "halyard-agent:latest"
-	
-	// Dynamically discover the agent's image by finding a running agent container
 	containers, err := c.ContainerList(ctx, container.ListOptions{})
 	if err == nil {
 		for _, cnt := range containers {
+			// Check if the image string contains it (works for typical tags)
 			if strings.Contains(cnt.Image, "halyard-agent") {
-				imageName = cnt.Image
-				break
+				return cnt.Image
+			}
+			// Swarm often uses sha256 digests. Let's check container labels and names.
+			serviceName := cnt.Labels["com.docker.swarm.service.name"]
+			composeService := cnt.Labels["com.docker.compose.service"]
+			if strings.Contains(serviceName, "agent") && strings.Contains(serviceName, "halyard") {
+				return cnt.ImageID
+			}
+			if strings.Contains(composeService, "agent") {
+				return cnt.ImageID
+			}
+			for _, name := range cnt.Names {
+				if strings.Contains(name, "halyard") && strings.Contains(name, "agent") {
+					return cnt.ImageID
+				}
 			}
 		}
 	}
+	return imageName
+}
+
+// RunHostCommand creates an ephemeral privileged container to execute a command on the host.
+func (c *Client) RunHostCommand(ctx context.Context, command string) (string, error) {
+	imageName := c.getAgentImage(ctx)
 
 	resp, err := c.ContainerCreate(ctx, &container.Config{
 		Image: imageName,
@@ -162,17 +179,7 @@ func (c *Client) RunHostCommand(ctx context.Context, command string) (string, er
 
 // StreamHostCommand runs a host command and returns the raw stream reader. The caller must close it.
 func (c *Client) StreamHostCommand(ctx context.Context, command string) (io.ReadCloser, error) {
-	imageName := "halyard-agent:latest"
-	
-	containers, err := c.ContainerList(ctx, container.ListOptions{})
-	if err == nil {
-		for _, cnt := range containers {
-			if strings.Contains(cnt.Image, "halyard-agent") {
-				imageName = cnt.Image
-				break
-			}
-		}
-	}
+	imageName := c.getAgentImage(ctx)
 
 	resp, err := c.ContainerCreate(ctx, &container.Config{
 		Image: imageName,
