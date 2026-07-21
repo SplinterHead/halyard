@@ -38,7 +38,7 @@ func (s *StatsCollector) pollHostUpdates() {
 }
 
 func (s *StatsCollector) checkHostUpdates() {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	log.Println("Running host update and reboot checks...")
@@ -65,6 +65,9 @@ func (s *StatsCollector) checkHostUpdates() {
 }
 
 func (s *StatsCollector) ListPendingUpdates(ctx context.Context) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	out, err := s.docker.RunHostCommand(ctx, "apt list --upgradable 2>/dev/null | grep -v Listing")
 	if err != nil {
 		return nil, err
