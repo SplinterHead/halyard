@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -95,23 +96,27 @@ func BuildFilters(m map[string]string) filters.Args {
 func (c *Client) getAgentImage(ctx context.Context) string {
 	imageName := "halyard-agent:latest"
 	containers, err := c.ContainerList(ctx, container.ListOptions{})
+	hostname, _ := os.Hostname()
 	if err == nil {
+		// First pass: try to find ourselves precisely
 		for _, cnt := range containers {
-			// Check if the image string contains it (works for typical tags)
+			if strings.HasPrefix(cnt.ID, hostname) || strings.HasPrefix(hostname, cnt.ID) {
+				// We found our exact container! Use its raw ImageID.
+				return cnt.ImageID
+			}
+		}
+
+		// Second pass: fallback heuristics
+		for _, cnt := range containers {
 			if strings.Contains(cnt.Image, "halyard-agent") {
 				return cnt.Image
 			}
-			// Swarm often uses sha256 digests. Let's check container labels and names.
 			serviceName := cnt.Labels["com.docker.swarm.service.name"]
-			composeService := cnt.Labels["com.docker.compose.service"]
-			if strings.Contains(serviceName, "agent") && strings.Contains(serviceName, "halyard") {
-				return cnt.ImageID
-			}
-			if strings.Contains(composeService, "agent") {
+			if strings.Contains(serviceName, "agent") {
 				return cnt.ImageID
 			}
 			for _, name := range cnt.Names {
-				if strings.Contains(name, "halyard") && strings.Contains(name, "agent") {
+				if strings.Contains(name, "agent") && (strings.Contains(name, "halyard") || strings.Contains(name, "monitor")) {
 					return cnt.ImageID
 				}
 			}
