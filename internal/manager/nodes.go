@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -324,7 +326,36 @@ func (m *NodeManager) PruneCluster(ctx context.Context, req api.PruneRequest) er
 	return nil
 }
 
-func (m *NodeManager) HostUpdate(ctx context.Context, nodeID string) error {
+func (m *NodeManager) GetPendingUpdates(ctx context.Context, nodeID string) ([]string, error) {
+	agentIP, err := m.getAgentIPForNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("http://%s:9090/host/updates/list", agentIP)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := agentclient.ParseError(resp, http.StatusOK); err != nil {
+		return nil, err
+	}
+
+	var packages []string
+	if err := json.NewDecoder(resp.Body).Decode(&packages); err != nil {
+		return nil, err
+	}
+	return packages, nil
+}
+
+func (m *NodeManager) StreamHostUpdate(ctx context.Context, nodeID string, w http.ResponseWriter, r *http.Request) error {
 	agentIP, err := m.getAgentIPForNode(ctx, nodeID)
 	if err != nil {
 		return err
@@ -336,13 +367,34 @@ func (m *NodeManager) HostUpdate(ctx context.Context, nodeID string) error {
 		return err
 	}
 
-	resp, err := m.client.Do(req)
+	// Important: We need a client without a timeout for streaming
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	return agentclient.ParseError(resp, http.StatusAccepted)
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return fmt.Errorf("streaming unsupported")
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		fmt.Fprintf(w, "%s\n", scanner.Text())
+		flusher.Flush()
+	}
+
+	return scanner.Err()
 }
 
 func (m *NodeManager) HostReboot(ctx context.Context, nodeID string) error {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -400,19 +401,54 @@ func main() {
 			return
 		}
 		
-		log.Println("Received request to run host updates via nsenter")
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-			defer cancel()
-			out, err := cli.RunHostCommand(ctx, "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y")
-			if err != nil {
-				log.Printf("Error running host update: %v\nOutput: %s", err, string(out))
-			} else {
-				log.Printf("Host update completed successfully")
-			}
-		}()
+		log.Println("Received request to stream host updates via nsenter")
 		
-		w.WriteHeader(http.StatusAccepted)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
+		defer cancel()
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+
+		stream, err := cli.StreamHostCommand(ctx, "DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y")
+		if err != nil {
+			fmt.Fprintf(w, "data: ERROR: %v\n\n", err)
+			flusher.Flush()
+			return
+		}
+		defer stream.Close()
+
+		fmt.Fprintf(w, "data: Update started...\n\n")
+		flusher.Flush()
+
+		scanner := bufio.NewScanner(stream)
+		for scanner.Scan() {
+			fmt.Fprintf(w, "data: %s\n\n", scanner.Text())
+			flusher.Flush()
+		}
+
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintf(w, "data: ERROR: %v\n\n", err)
+		} else {
+			fmt.Fprintf(w, "data: DONE\n\n")
+		}
+		flusher.Flush()
+	})
+
+	http.HandleFunc("/host/updates/list", func(w http.ResponseWriter, r *http.Request) {
+		packages, err := statsColl.ListPendingUpdates(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(packages)
 	})
 
 	http.HandleFunc("/host/reboot", func(w http.ResponseWriter, r *http.Request) {

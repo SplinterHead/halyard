@@ -399,8 +399,25 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	http.HandleFunc("/api/nodes/host/update", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+	http.HandleFunc("/api/nodes/updates/list", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "Node ID is required", http.StatusBadRequest)
+			return
+		}
+
+		packages, err := nodeMgr.GetPendingUpdates(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(packages)
+	})
+
+	http.HandleFunc("/api/nodes/update/stream", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
@@ -411,12 +428,12 @@ func main() {
 			return
 		}
 
-		if err := nodeMgr.HostUpdate(r.Context(), id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if err := nodeMgr.StreamHostUpdate(r.Context(), id, w, r); err != nil {
+			// Do not log simple network disconnects aggressively
+			if err.Error() != "client disconnected" && !strings.Contains(err.Error(), "broken pipe") {
+				log.Printf("Error streaming host update: %v", err)
+			}
 		}
-
-		w.WriteHeader(http.StatusAccepted)
 	})
 
 	http.HandleFunc("/api/nodes/host/reboot", func(w http.ResponseWriter, r *http.Request) {

@@ -211,6 +211,54 @@
       </v-card>
     </v-dialog>
 
+    <!-- Interactive Update Dialog -->
+    <v-dialog v-model="updateDialog.show" max-width="500" persistent>
+      <v-card class="solid-card pa-6">
+        <v-card-title class="text-h6 font-weight-bold px-0 pb-4 d-flex align-center justify-space-between">
+          <span>Run System Updates</span>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="closeUpdateDialog" :disabled="updateDialog.updating"></v-btn>
+        </v-card-title>
+        <v-card-text class="pa-0">
+          <v-alert v-if="updateDialog.error" type="error" variant="tonal" class="mb-4 text-body-2">
+            {{ updateDialog.error }}
+          </v-alert>
+          
+          <div v-if="updateDialog.loading" class="d-flex flex-column align-center justify-center py-8">
+            <v-progress-circular indeterminate color="primary" class="mb-4"></v-progress-circular>
+            <span class="text-grey text-body-2">Fetching pending packages...</span>
+          </div>
+          
+          <div v-else-if="updateDialog.packages.length === 0" class="text-center py-4 text-grey">
+            No packages found.
+          </div>
+          
+          <v-list v-else class="bg-transparent" density="compact">
+            <v-list-item v-for="(pkg, idx) in updateDialog.packages" :key="idx" class="px-0">
+              <template v-slot:prepend>
+                <v-icon v-if="pkg.status === 'pending'" color="success" icon="mdi-circle-outline"></v-icon>
+                <v-icon v-else-if="pkg.status === 'success'" color="success" icon="mdi-check-circle"></v-icon>
+                <v-icon v-else-if="pkg.status === 'error'" color="error" icon="mdi-close-circle"></v-icon>
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium ms-3">{{ pkg.name }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions class="px-0 pt-6">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" color="grey" @click="closeUpdateDialog" :disabled="updateDialog.updating">Cancel</v-btn>
+          <v-btn
+            variant="flat"
+            color="info"
+            :loading="updateDialog.updating"
+            :disabled="updateDialog.packages.length === 0"
+            @click="confirmUpdate"
+          >
+            Confirm Update
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-divider class="mb-6"></v-divider>
 
     <Loader :loading="loading && !node" />
@@ -239,7 +287,7 @@
           >
             <div class="d-flex justify-space-between align-center w-100">
               <span>There are <strong>{{ node.pending_updates }}</strong> package updates available for this node.</span>
-              <v-btn size="small" color="info" variant="elevated" :loading="isUpdatingHost" @click="triggerHostUpdate">Run Updates</v-btn>
+              <v-btn size="small" color="info" variant="elevated" @click="openUpdateDialog">Run Updates</v-btn>
             </div>
           </v-alert>
         </v-col>
@@ -381,21 +429,102 @@ const rebootDialog = ref({
   draining: false
 })
 
-const triggerHostUpdate = async () => {
+interface PackageUpdate {
+  name: string
+  status: 'pending' | 'success' | 'error'
+}
+
+const updateDialog = ref({
+  show: false,
+  loading: false,
+  updating: false,
+  packages: [] as PackageUpdate[],
+  error: '',
+  eventSource: null as EventSource | null
+})
+
+const openUpdateDialog = async () => {
   if (!node.value) return
-  isUpdatingHost.value = true
+  updateDialog.value.show = true
+  updateDialog.value.loading = true
+  updateDialog.value.error = ''
+  updateDialog.value.updating = false
+  updateDialog.value.packages = []
+  
   try {
-    const response = await fetch(`/api/nodes/host/update?id=${node.value.node_id}`, { method: 'POST' })
-    if (!response.ok) {
-      console.error('Failed to trigger host update:', await response.text())
+    const res = await fetch(`/api/nodes/updates/list?id=${node.value.node_id}`)
+    if (res.ok) {
+      const pkgs = await res.json()
+      if (pkgs) {
+        updateDialog.value.packages = pkgs.map((p: string) => ({ name: p, status: 'pending' }))
+      }
+    } else {
+      updateDialog.value.error = 'Failed to load package list'
     }
   } catch (err) {
-    console.error('Failed to trigger host update:', err)
+    updateDialog.value.error = 'Failed to load package list'
   } finally {
-    isUpdatingHost.value = false
+    updateDialog.value.loading = false
   }
 }
 
+const confirmUpdate = () => {
+  if (!node.value) return
+  updateDialog.value.updating = true
+  updateDialog.value.error = ''
+  
+  const eventSource = new EventSource(`/api/nodes/update/stream?id=${node.value.node_id}`)
+  updateDialog.value.eventSource = eventSource
+  
+  eventSource.onmessage = (event) => {
+    const data = event.data
+    
+    if (data === 'DONE') {
+      eventSource.close()
+      updateDialog.value.eventSource = null
+      updateDialog.value.updating = false
+      return
+    }
+    
+    if (data.startsWith('ERROR:')) {
+      updateDialog.value.error = data
+      eventSource.close()
+      updateDialog.value.eventSource = null
+      updateDialog.value.updating = false
+      // Mark remaining as error
+      updateDialog.value.packages.forEach(p => {
+        if (p.status === 'pending') p.status = 'error'
+      })
+      return
+    }
+    
+    const match = data.match(/Setting up ([a-zA-Z0-9\.\-\+]+)/)
+    if (match && match[1]) {
+      const pkgName = match[1]
+      const pkg = updateDialog.value.packages.find(p => p.name === pkgName || pkgName.startsWith(p.name))
+      if (pkg) {
+        pkg.status = 'success'
+      }
+    }
+  }
+  
+  eventSource.onerror = (err) => {
+    updateDialog.value.error = 'Stream connection lost'
+    eventSource.close()
+    updateDialog.value.eventSource = null
+    updateDialog.value.updating = false
+    updateDialog.value.packages.forEach(p => {
+      if (p.status === 'pending') p.status = 'error'
+    })
+  }
+}
+
+const closeUpdateDialog = () => {
+  if (updateDialog.value.eventSource) {
+    updateDialog.value.eventSource.close()
+  }
+  updateDialog.value.show = false
+}
 const executeHostReboot = async (drain: boolean) => {
   if (!node.value) return
   isRebootingHost.value = true

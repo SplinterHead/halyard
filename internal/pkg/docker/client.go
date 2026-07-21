@@ -159,3 +159,56 @@ func (c *Client) RunHostCommand(ctx context.Context, command string) (string, er
 
 	return buf.String(), nil
 }
+
+// StreamHostCommand runs a host command and returns the raw stream reader. The caller must close it.
+func (c *Client) StreamHostCommand(ctx context.Context, command string) (io.ReadCloser, error) {
+	imageName := "halyard-agent:latest"
+	
+	containers, err := c.ContainerList(ctx, container.ListOptions{})
+	if err == nil {
+		for _, cnt := range containers {
+			if strings.Contains(cnt.Image, "halyard-agent") {
+				imageName = cnt.Image
+				break
+			}
+		}
+	}
+
+	resp, err := c.ContainerCreate(ctx, &container.Config{
+		Image: imageName,
+		Cmd:   []string{"nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", command},
+		Tty:   false,
+	}, &container.HostConfig{
+		Privileged: true,
+		PidMode:    "host",
+	}, nil, nil, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		return nil, err
+	}
+
+	// Clean up container in background when done
+	go func() {
+		statusCh, errCh := c.ContainerWait(context.Background(), resp.ID, container.WaitConditionNotRunning)
+		select {
+		case <-errCh:
+		case <-statusCh:
+		}
+		c.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
+	}()
+
+	logs, err := c.ContainerLogs(ctx, resp.ID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return logs, nil
+}

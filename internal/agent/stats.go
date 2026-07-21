@@ -54,6 +54,27 @@ func (s *StatsCollector) checkHostUpdates() {
 	s.restartRequired.Store(errReboot == nil)
 }
 
+func (s *StatsCollector) ListPendingUpdates(ctx context.Context) ([]string, error) {
+	out, err := s.docker.RunHostCommand(ctx, "apt list --upgradable 2>/dev/null | grep -v Listing")
+	if err != nil {
+		return nil, err
+	}
+
+	var packages []string
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "/", 2)
+		if len(parts) == 2 {
+			packages = append(packages, parts[0])
+		}
+	}
+	return packages, nil
+}
+
 func (s *StatsCollector) GetNodeStats(ctx context.Context) (api.NodeStats, error) {
 	vm, err := mem.VirtualMemoryWithContext(ctx)
 	if err != nil {
