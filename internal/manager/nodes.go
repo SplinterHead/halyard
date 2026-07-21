@@ -2,7 +2,6 @@ package manager
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -338,7 +337,8 @@ func (m *NodeManager) GetPendingUpdates(ctx context.Context, nodeID string) ([]s
 		return nil, err
 	}
 
-	resp, err := m.client.Do(req)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
