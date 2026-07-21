@@ -337,7 +337,7 @@ func (m *NodeManager) GetPendingUpdates(ctx context.Context, nodeID string) ([]s
 		return nil, err
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 2 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
