@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/docker/docker/api/types"
@@ -23,9 +23,10 @@ type ContainerAggregator struct {
 }
 
 func NewContainerAggregator(cli *docker.Client, agentDir *AgentDirectory) *ContainerAggregator {
+	token := os.Getenv("HALYARD_AGENT_TOKEN")
 	return &ContainerAggregator{
 		docker:   cli,
-		client:   &http.Client{Timeout: 5 * time.Second},
+		client:   agentclient.NewClient(token),
 		agentDir: agentDir,
 	}
 }
@@ -169,7 +170,11 @@ func (m *ContainerAggregator) StreamLogsWS(ctx context.Context, id, nodeName str
 
 	// 2. Connect to agent WS
 	agentURL := fmt.Sprintf("ws://%s:9090/containers/logs?id=%s", agentIP, id)
-	agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, nil)
+	headers := http.Header{}
+	if token := os.Getenv("HALYARD_AGENT_TOKEN"); token != "" {
+		headers.Add("Authorization", "Bearer "+token)
+	}
+	agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, headers)
 	if err != nil {
 		clientConn.WriteMessage(websocket.TextMessage, []byte("Error connecting to agent: "+err.Error()))
 		return err
@@ -289,7 +294,11 @@ func (m *ContainerAggregator) ProxyExecWS(ctx context.Context, id, nodeName, she
 	defer clientConn.Close()
 
 	agentURL := fmt.Sprintf("ws://%s:9090/containers/exec?id=%s&shell=%s", agentIP, id, shell)
-	agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, nil)
+	headers := http.Header{}
+	if token := os.Getenv("HALYARD_AGENT_TOKEN"); token != "" {
+		headers.Add("Authorization", "Bearer "+token)
+	}
+	agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, headers)
 	if err != nil {
 		clientConn.WriteMessage(websocket.TextMessage, []byte("\r\nError connecting to agent: "+err.Error()+"\r\n"))
 		return err

@@ -1,9 +1,12 @@
 services:
   manager:
     image: splinterhead27/halyard-manager:latest
+    environment:
+      HALYARD_AGENT_TOKEN: ${HALYARD_AGENT_TOKEN:-default-internal-token-change-me}
     networks:
       - halyard
-      - proxy
+    ports:
+      - 8080:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - halyard_data:/data
@@ -22,6 +25,7 @@ services:
       HOST_PROC: /host/proc
       HOST_SYS: /host/sys
       HOST_ETC: /host/etc
+      HALYARD_AGENT_TOKEN: ${HALYARD_AGENT_TOKEN:-default-internal-token-change-me}
     networks:
       - halyard
     volumes:
@@ -37,8 +41,6 @@ networks:
   halyard:
     driver: overlay
     external: false
-  proxy:
-    external: true
 
 volumes:
   halyard_data:

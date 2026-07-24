@@ -492,7 +492,22 @@ func main() {
 	})
 
 	log.Println("Agent listening on :9090")
-	log.Fatal(http.ListenAndServe(":9090", nil))
+	token := os.Getenv("HALYARD_AGENT_TOKEN")
+	handler := AuthMiddleware(token, http.DefaultServeMux)
+	log.Fatal(http.ListenAndServe(":9090", handler))
+}
+
+func AuthMiddleware(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token != "" {
+			authHeader := r.Header.Get("Authorization")
+			if authHeader != "Bearer "+token {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 type wsWriter struct {

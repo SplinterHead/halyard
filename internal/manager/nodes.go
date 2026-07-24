@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -27,9 +28,10 @@ type NodeManager struct {
 }
 
 func NewNodeManager(cli *docker.Client, db *DB, agentDir *AgentDirectory) *NodeManager {
+	token := os.Getenv("HALYARD_AGENT_TOKEN")
 	return &NodeManager{
 		docker:   cli,
-		client:   &http.Client{Timeout: 2 * time.Second},
+		client:   agentclient.NewClient(token),
 		db:       db,
 		agentDir: agentDir,
 	}
@@ -129,7 +131,11 @@ func (m *NodeManager) StreamStatsWS(parentCtx context.Context, w http.ResponseWr
 	for _, agent := range activeAgents {
 		go func(agentIP, id string) {
 			agentURL := fmt.Sprintf("ws://%s:9090/stats/stream", agentIP)
-			agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, nil)
+			headers := http.Header{}
+			if token := os.Getenv("HALYARD_AGENT_TOKEN"); token != "" {
+				headers.Add("Authorization", "Bearer "+token)
+			}
+			agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, headers)
 			if err != nil {
 				log.Printf("Failed to connect to agent at %s: %v", agentIP, err)
 				return

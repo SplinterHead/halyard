@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/SplinterHead/halyard/api"
@@ -22,9 +22,10 @@ type ImageAggregator struct {
 }
 
 func NewImageAggregator(cli *docker.Client, agentDir *AgentDirectory) *ImageAggregator {
+	token := os.Getenv("HALYARD_AGENT_TOKEN")
 	return &ImageAggregator{
 		docker:   cli,
-		client:   &http.Client{Timeout: 10 * time.Second},
+		client:   agentclient.NewClient(token),
 		agentDir: agentDir,
 	}
 }

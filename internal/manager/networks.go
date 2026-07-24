@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/network"
@@ -22,9 +22,10 @@ type NetworkAggregator struct {
 }
 
 func NewNetworkAggregator(cli *docker.Client, agentDir *AgentDirectory) *NetworkAggregator {
+	token := os.Getenv("HALYARD_AGENT_TOKEN")
 	return &NetworkAggregator{
 		docker:   cli,
-		client:   &http.Client{Timeout: 5 * time.Second},
+		client:   agentclient.NewClient(token),
 		agentDir: agentDir,
 	}
 }

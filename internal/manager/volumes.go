@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/SplinterHead/halyard/api"
@@ -22,10 +22,11 @@ type VolumeAggregator struct {
 }
 
 func NewVolumeAggregator(cli *docker.Client, agentDir *AgentDirectory) *VolumeAggregator {
+	token := os.Getenv("HALYARD_AGENT_TOKEN")
 	return &VolumeAggregator{
 		docker:      cli,
-		client:      &http.Client{Timeout: 5 * time.Second},
-		pruneClient: &http.Client{Timeout: 120 * time.Second},
+		client:      agentclient.NewClient(token),
+		pruneClient: agentclient.NewPruneClient(token),
 		agentDir:    agentDir,
 	}
 }
