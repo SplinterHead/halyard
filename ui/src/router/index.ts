@@ -18,11 +18,7 @@ const routes = [
     name: "visualizer",
     component: () => import("../views/swarm/VisualizerView.vue"),
   },
-  {
-    path: "/swarm/network-visualizer",
-    name: "network-visualizer",
-    component: () => import("../views/swarm/NetworkVisualizerView.vue"),
-  },
+
   {
     path: "/swarm/nodes/:id",
     name: "node-detail",
