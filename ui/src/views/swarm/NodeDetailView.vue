@@ -101,6 +101,19 @@
         >
           Demote
         </v-btn>
+
+        <!-- Action: Reboot -->
+        <v-divider vertical class="mx-2" style="height: 24px; opacity: 0.2"></v-divider>
+        <v-btn
+          size="small"
+          color="error"
+          variant="tonal"
+          prepend-icon="mdi-restart"
+          class="rounded-sm"
+          @click="rebootDialog.show = true"
+        >
+          Reboot
+        </v-btn>
       </div>
     </div>
 
@@ -385,7 +398,7 @@
 
         <!-- Historical Graphs -->
         <v-col cols="12">
-          <node-history-charts ref="historyCharts" :node-id="node.node_id" />
+          <node-history-charts ref="historyCharts" :node-id="node.node_id" :total-memory="node.memory_total || node.memory" />
         </v-col>
       </v-row>
     </v-container>
@@ -473,7 +486,8 @@ const confirmUpdate = () => {
   updateDialog.value.updating = true
   updateDialog.value.error = ''
   
-  const eventSource = new EventSource(`/api/nodes/update/stream?id=${node.value.node_id}`)
+  const token = localStorage.getItem("halyard_token") || ""
+  const eventSource = new EventSource(`/api/nodes/update/stream?id=${node.value.node_id}&token=${encodeURIComponent(token)}`)
   updateDialog.value.eventSource = eventSource
   
   eventSource.onmessage = (event) => {

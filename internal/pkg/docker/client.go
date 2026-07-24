@@ -125,8 +125,8 @@ func (c *Client) getAgentImage(ctx context.Context) string {
 	return imageName
 }
 
-// RunHostCommand creates an ephemeral privileged container to execute a command on the host.
-func (c *Client) RunHostCommand(ctx context.Context, command string) (string, error) {
+// createHostCommandContainer creates an ephemeral privileged container to execute a command on the host.
+func (c *Client) createHostCommandContainer(ctx context.Context, command string) (string, error) {
 	imageName := c.getAgentImage(ctx)
 
 	resp, err := c.ContainerCreate(ctx, &container.Config{
@@ -146,26 +146,36 @@ func (c *Client) RunHostCommand(ctx context.Context, command string) (string, er
 		return "", err
 	}
 
-	statusCh, errCh := c.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+	return resp.ID, nil
+}
+
+// RunHostCommand creates an ephemeral privileged container to execute a command on the host.
+func (c *Client) RunHostCommand(ctx context.Context, command string) (string, error) {
+	containerID, err := c.createHostCommandContainer(ctx, command)
+	if err != nil {
+		return "", err
+	}
+
+	statusCh, errCh := c.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 	
 	var exitCode int64
 	select {
 	case err := <-errCh:
 		if err != nil {
-			c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			c.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 			return "", err
 		}
 	case status := <-statusCh:
 		if status.Error != nil {
-			c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			c.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 			return "", fmt.Errorf(status.Error.Message)
 		}
 		exitCode = status.StatusCode
 	}
 
-	out, err := c.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+	out, err := c.ContainerLogs(ctx, containerID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
 	if err != nil {
-		c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		c.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 		return "", err
 	}
 	defer out.Close()
@@ -173,7 +183,7 @@ func (c *Client) RunHostCommand(ctx context.Context, command string) (string, er
 	buf := new(bytes.Buffer)
 	stdcopy.StdCopy(buf, buf, out) // demux docker logs
 
-	c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+	c.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 
 	if exitCode != 0 {
 		return buf.String(), fmt.Errorf("exit code %d", exitCode)
@@ -184,36 +194,22 @@ func (c *Client) RunHostCommand(ctx context.Context, command string) (string, er
 
 // StreamHostCommand runs a host command and returns the raw stream reader. The caller must close it.
 func (c *Client) StreamHostCommand(ctx context.Context, command string) (io.ReadCloser, error) {
-	imageName := c.getAgentImage(ctx)
-
-	resp, err := c.ContainerCreate(ctx, &container.Config{
-		Image: imageName,
-		Cmd:   []string{"nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", command},
-		Tty:   false,
-	}, &container.HostConfig{
-		Privileged: true,
-		PidMode:    "host",
-	}, nil, nil, "")
+	containerID, err := c.createHostCommandContainer(ctx, command)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := c.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		c.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
 		return nil, err
 	}
 
 	// Clean up container in background when done
 	go func() {
-		statusCh, errCh := c.ContainerWait(context.Background(), resp.ID, container.WaitConditionNotRunning)
+		statusCh, errCh := c.ContainerWait(context.Background(), containerID, container.WaitConditionNotRunning)
 		select {
 		case <-errCh:
 		case <-statusCh:
 		}
-		c.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
+		c.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true})
 	}()
 
-	logs, err := c.ContainerLogs(ctx, resp.ID, container.LogsOptions{
+	logs, err := c.ContainerLogs(ctx, containerID, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
@@ -222,5 +218,12 @@ func (c *Client) StreamHostCommand(ctx context.Context, command string) (io.Read
 		return nil, err
 	}
 
-	return logs, nil
+	pr, pw := io.Pipe()
+	go func() {
+		defer logs.Close()
+		defer pw.Close()
+		stdcopy.StdCopy(pw, pw, logs)
+	}()
+
+	return pr, nil
 }

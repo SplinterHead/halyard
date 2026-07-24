@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,6 +28,8 @@ func NewStatsCollector(cli *docker.Client) *StatsCollector {
 }
 
 func (s *StatsCollector) pollHostUpdates() {
+	// Give the Docker daemon a moment to fully register this container's state
+	time.Sleep(15 * time.Second)
 	s.checkHostUpdates()
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
@@ -44,17 +45,13 @@ func (s *StatsCollector) checkHostUpdates() {
 	log.Println("Running host update and reboot checks...")
 
 	// Check for updates
-	out, err := s.docker.RunHostCommand(ctx, "apt list --upgradable 2>/dev/null | grep -v Listing | wc -l")
+	packages, err := s.ListPendingUpdates(ctx)
 	if err == nil {
-		count, err := strconv.Atoi(strings.TrimSpace(out))
-		if err == nil {
-			s.pendingUpdates.Store(int32(count))
-			log.Printf("Host updates check completed: %d pending updates found", count)
-		} else {
-			log.Printf("Host updates check failed to parse count '%s': %v", out, err)
-		}
+		count := len(packages)
+		s.pendingUpdates.Store(int32(count))
+		log.Printf("Host updates check completed: %d pending updates found", count)
 	} else {
-		log.Printf("Host updates check failed to execute command: %v (output: %s)", err, out)
+		log.Printf("Host updates check failed: %v", err)
 	}
 
 	// Check for reboot requirement
@@ -65,10 +62,10 @@ func (s *StatsCollector) checkHostUpdates() {
 }
 
 func (s *StatsCollector) ListPendingUpdates(ctx context.Context) ([]string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	out, err := s.docker.RunHostCommand(ctx, "apt list --upgradable 2>/dev/null | grep -v Listing")
+	out, err := s.docker.RunHostCommand(ctx, "DEBIAN_FRONTEND=noninteractive apt-get update >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get -s -q upgrade 2>/dev/null | grep '^Inst ' | awk '{print $2}'")
 	if err != nil {
 		return nil, err
 	}
@@ -80,10 +77,7 @@ func (s *StatsCollector) ListPendingUpdates(ctx context.Context) ([]string, erro
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "/", 2)
-		if len(parts) == 2 {
-			packages = append(packages, parts[0])
-		}
+		packages = append(packages, line)
 	}
 	return packages, nil
 }

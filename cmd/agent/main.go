@@ -62,6 +62,16 @@ func main() {
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
 
+		// Detect client disconnect immediately
+		go func() {
+			defer cancel()
+			for {
+				if _, _, err := conn.NextReader(); err != nil {
+					break
+				}
+			}
+		}()
+
 		go statsColl.StreamStats(ctx, statsChan, 2*time.Second)
 
 		for {
@@ -266,6 +276,17 @@ func main() {
 		}
 		defer stream.Close()
 
+		// Detect client disconnect immediately
+		go func() {
+			for {
+				if _, _, err := conn.NextReader(); err != nil {
+					// Close stream to unblock DemuxLogs
+					stream.Close()
+					break
+				}
+			}
+		}()
+
 		// Helper to write log chunks to websocket
 		writer := &wsWriter{conn: conn}
 		docker.DemuxLogs(stream, writer)
@@ -407,7 +428,7 @@ func main() {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
+		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
 
 		flusher, ok := w.(http.Flusher)

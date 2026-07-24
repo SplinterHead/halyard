@@ -36,6 +36,7 @@ import { ref, onMounted, computed } from 'vue'
 
 const props = defineProps<{
   nodeId: string
+  totalMemory?: number
 }>()
 
 const loading = ref(false)
@@ -116,15 +117,23 @@ const cpuChartOptions = computed(() => ({
   }
 }))
 
-const memChartOptions = computed(() => ({
-  ...commonOptions,
-  colors: ['#2196F3'],
-  yaxis: {
-    ...commonOptions.yaxis,
-    min: 0,
-    title: { text: 'Memory (GB)', style: { color: '#757575' } }
+const memChartOptions = computed(() => {
+  const opts: any = {
+    ...commonOptions,
+    colors: ['#2196F3'],
+    yaxis: {
+      ...commonOptions.yaxis,
+      min: 0,
+      title: { text: 'Memory (GB)', style: { color: '#757575' } }
+    }
   }
-}))
+  
+  if (props.totalMemory) {
+    opts.yaxis.max = Math.round((props.totalMemory / (1024 * 1024 * 1024)) * 100) / 100
+  }
+  
+  return opts
+})
 
 const addStats = (stats: any) => {
   // Only add if it's for this node (though parent should filter)

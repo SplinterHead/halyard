@@ -338,7 +338,7 @@
 
     <!-- Prune Confirmation Dialog -->
     <v-dialog v-model="pruneDialog" max-width="500" persistent>
-      <v-card class="rounded-xl border-0" color="#121212">
+      <v-card class="solid-card rounded-xl border-0">
         <v-card-title class="pa-6 pb-2 d-flex align-center">
           <v-avatar color="error" size="36" variant="tonal" class="me-3">
             <v-icon size="20">mdi-broom</v-icon>
