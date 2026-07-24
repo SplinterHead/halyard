@@ -67,7 +67,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import Loader from '@/components/Loader.vue';
+import Loader from './Loader.vue';
 
 const props = defineProps({
   title: String,
