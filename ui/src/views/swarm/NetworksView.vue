@@ -1,21 +1,20 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Swarm Networks</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search networks..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
+  <DataTablePage
+    title="Swarm Networks"
+    :items="networks"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-network-off-outline"
+    empty-title="No networks found"
+    empty-description="Networks created for your services will appear here once detected."
+    search-placeholder="Search networks..."
+    :sort-by="[{ key: 'name', order: 'asc' }]"
+    :row-props="getRowProps"
+    @refresh="fetchNetworks"
+    @click:row="goToDetail"
+  >
+    <template v-slot:actions>
+      <v-btn
           prepend-icon="mdi-plus"
           color="primary"
           flat
@@ -23,236 +22,196 @@
         >
           Create Network
         </v-btn>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchNetworks"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
+    </template>
+    <template v-slot:top>
+      <v-dialog v-model="dialog" max-width="600px" persistent>
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2">
+                <span class="text-h5 font-weight-bold">Create Swarm Network</span>
+              </v-card-title>
+              
+              <v-card-text class="pa-6 pt-2">
+                <v-form ref="form" v-model="valid">
+                  <v-text-field
+                    v-model="newNetwork.name"
+                    label="Network Name"
+                    placeholder="my-overlay-net"
+                    variant="outlined"
+                    density="comfortable"
+                    :rules="[v => !!v || 'Name is required']"
+                    required
+                    class="mb-4"
+                  ></v-text-field>
 
-    <v-divider class="my-4"></v-divider>
+                  <v-select
+                    v-model="newNetwork.driver"
+                    :items="['overlay', 'bridge']"
+                    label="Driver"
+                    variant="outlined"
+                    density="comfortable"
+                    class="mb-4"
+                  ></v-select>
 
-    <Loader :loading="loading" />
+                  <v-row>
+                    <v-col cols="12" md="6">
+                      <v-switch
+                        v-model="newNetwork.attachable"
+                        label="Attachable"
+                        hint="Allow standalone containers to connect"
+                        persistent-hint
+                        color="primary"
+                        density="compact"
+                      ></v-switch>
+                    </v-col>
+                    <v-col cols="12" md="6">
+                      <v-switch
+                        v-model="newNetwork.internal"
+                        label="Internal"
+                        hint="Restrict external access"
+                        persistent-hint
+                        color="primary"
+                        density="compact"
+                      ></v-switch>
+                    </v-col>
+                  </v-row>
 
-    <div v-if="networks.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
-      <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-lan-pending</v-icon>
-      <h3 class="text-h5 text-grey-darken-1">No Networks Found</h3>
-      <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
-        Swarm networks allow your services to communicate securely across nodes. Use the button above to create your first overlay network.
-      </p>
-    </div>
+                  <v-divider class="my-6"></v-divider>
+                  <div class="text-subtitle-2 mb-2">IPAM Configuration (Optional)</div>
+                  
+                  <v-row>
+                    <v-col cols="12" md="8">
+                      <v-text-field
+                        v-model="newNetwork.ipam.subnet"
+                        label="Subnet (CIDR)"
+                        placeholder="10.0.10.0/24"
+                        variant="outlined"
+                        density="comfortable"
+                      ></v-text-field>
+                    </v-col>
+                    <v-col cols="12" md="4">
+                      <v-text-field
+                        v-model="newNetwork.ipam.gateway"
+                        label="Gateway"
+                        placeholder="10.0.10.1"
+                        variant="outlined"
+                        density="comfortable"
+                      ></v-text-field>
+                    </v-col>
+                  </v-row>
 
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="networks"
-        :search="searchQuery"
-        :sort-by="[{ key: 'name', order: 'asc' }]"
-        :row-props="getRowProps"
-        class="bg-transparent"
-        density="comfortable"
-        items-per-page="25"
-        hover
-        @click:row="goToDetail"
-      >
-        <template v-slot:item.name="{ item }">
-          <div class="d-flex flex-column">
-            <span class="text-body-2 font-weight-bold">{{ item.name }}</span>
-            <span class="text-caption text-grey">{{ item.stack === '-' ? 'System' : item.stack }}</span>
-          </div>
-        </template>
+                  <div v-if="newNetwork.driver === 'overlay'" class="mt-4">
+                    <v-checkbox
+                      v-model="newNetwork.encrypted"
+                      label="Enable Encryption (IPSEC)"
+                      color="primary"
+                      hide-details
+                      density="compact"
+                    ></v-checkbox>
+                  </div>
+                </v-form>
+              </v-card-text>
 
-
-        <template v-slot:item.driver="{ value }">
-          <div class="text-center">
-            <v-chip size="x-small" variant="tonal" color="secondary" label>
-              {{ value }}
-            </v-chip>
-          </div>
-        </template>
-
-        <template v-slot:item.node="{ value }">
-          <code class="text-caption" v-if="value !== 'Swarm'">{{ value }}</code>
-          <span v-else class="text-caption text-grey">Swarm</span>
-        </template>
-
-        <template v-slot:item.subnet="{ value }">
-          <code class="font-mono text-caption" v-if="value">{{ value }}</code>
-          <span v-else class="text-caption text-grey-lighten-1">-</span>
-        </template>
-
-        <template v-slot:item.gateway="{ value }">
-          <code class="font-mono text-caption" v-if="value">{{ value }}</code>
-          <span v-else class="text-caption text-grey-lighten-1">-</span>
-        </template>
-
-        <template v-slot:item.created_at="{ value }">
-          <RelativeTime :value="value" />
-        </template>
-
-        <template v-slot:item.actions="{ item }">
-          <v-btn
-            icon="mdi-delete-outline"
-            size="x-small"
-            variant="text"
-            color="error"
-            @click.stop="confirmDelete(item)"
-          ></v-btn>
-        </template>
-      </v-data-table>
-    </div>
-
-    <!-- Create Network Dialog -->
-    <v-dialog v-model="dialog" max-width="600px" persistent>
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2">
-          <span class="text-h5 font-weight-bold">Create Swarm Network</span>
-        </v-card-title>
-        
-        <v-card-text class="pa-6 pt-2">
-          <v-form ref="form" v-model="valid">
-            <v-text-field
-              v-model="newNetwork.name"
-              label="Network Name"
-              placeholder="my-overlay-net"
-              variant="outlined"
-              density="comfortable"
-              :rules="[v => !!v || 'Name is required']"
-              required
-              class="mb-4"
-            ></v-text-field>
-
-            <v-select
-              v-model="newNetwork.driver"
-              :items="['overlay', 'bridge']"
-              label="Driver"
-              variant="outlined"
-              density="comfortable"
-              class="mb-4"
-            ></v-select>
-
-            <v-row>
-              <v-col cols="12" md="6">
-                <v-switch
-                  v-model="newNetwork.attachable"
-                  label="Attachable"
-                  hint="Allow standalone containers to connect"
-                  persistent-hint
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" @click="closeDialog" :disabled="saving">Cancel</v-btn>
+                <v-btn
                   color="primary"
-                  density="compact"
-                ></v-switch>
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-switch
-                  v-model="newNetwork.internal"
-                  label="Internal"
-                  hint="Restrict external access"
-                  persistent-hint
-                  color="primary"
-                  density="compact"
-                ></v-switch>
-              </v-col>
-            </v-row>
+                  variant="flat"
+                  @click="createNetwork"
+                  :loading="saving"
+                  :disabled="!valid"
+                >
+                  Create
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+      <v-dialog v-model="deleteDialog" max-width="400px">
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2">Delete Network?</v-card-title>
+              <v-card-text class="pa-6 pt-0">
+                Are you sure you want to remove the network <strong>{{ networkToDelete?.name }}</strong>? This action cannot be undone.
+              </v-card-text>
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+                <v-btn
+                  color="error"
+                  variant="flat"
+                  @click="deleteNetwork"
+                  :loading="deleting"
+                >Remove Network</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+      <v-dialog v-model="errorDialog" max-width="500px">
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2 text-error d-flex align-center">
+                <v-icon color="error" class="me-2">mdi-alert-circle</v-icon>
+                Network Deletion Failed
+              </v-card-title>
+              <v-card-text class="pa-6 pt-0">
+                <p class="mb-4">The network could not be deleted. This usually happens if it is still being used by one or more services or containers.</p>
+                <div class="bg-black bg-opacity-20 pa-4 rounded-lg font-mono text-caption text-error border border-error border-opacity-20">
+                  {{ errorMessage }}
+                </div>
+              </v-card-text>
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="flat" color="primary" @click="errorDialog = false">Dismiss</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+    </template>
+    <template v-slot:item.name="{ item }">
+              <div class="d-flex flex-column">
+                <span class="text-body-2 font-weight-bold">{{ item.name }}</span>
+                <span class="text-caption text-grey">{{ item.stack === '-' ? 'System' : item.stack }}</span>
+              </div>
+            </template>
 
-            <v-divider class="my-6"></v-divider>
-            <div class="text-subtitle-2 mb-2">IPAM Configuration (Optional)</div>
-            
-            <v-row>
-              <v-col cols="12" md="8">
-                <v-text-field
-                  v-model="newNetwork.ipam.subnet"
-                  label="Subnet (CIDR)"
-                  placeholder="10.0.10.0/24"
-                  variant="outlined"
-                  density="comfortable"
-                ></v-text-field>
-              </v-col>
-              <v-col cols="12" md="4">
-                <v-text-field
-                  v-model="newNetwork.ipam.gateway"
-                  label="Gateway"
-                  placeholder="10.0.10.1"
-                  variant="outlined"
-                  density="comfortable"
-                ></v-text-field>
-              </v-col>
-            </v-row>
 
-            <div v-if="newNetwork.driver === 'overlay'" class="mt-4">
-              <v-checkbox
-                v-model="newNetwork.encrypted"
-                label="Enable Encryption (IPSEC)"
-                color="primary"
-                hide-details
-                density="compact"
-              ></v-checkbox>
-            </div>
-          </v-form>
-        </v-card-text>
+            <template v-slot:item.driver="{ value }">
+              <div class="text-center">
+                <v-chip size="x-small" variant="tonal" color="secondary" label>
+                  {{ value }}
+                </v-chip>
+              </div>
+            </template>
 
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeDialog" :disabled="saving">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            @click="createNetwork"
-            :loading="saving"
-            :disabled="!valid"
-          >
-            Create
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+            <template v-slot:item.node="{ value }">
+              <code class="text-caption" v-if="value !== 'Swarm'">{{ value }}</code>
+              <span v-else class="text-caption text-grey">Swarm</span>
+            </template>
 
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2">Delete Network?</v-card-title>
-        <v-card-text class="pa-6 pt-0">
-          Are you sure you want to remove the network <strong>{{ networkToDelete?.name }}</strong>? This action cannot be undone.
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn
-            color="error"
-            variant="flat"
-            @click="deleteNetwork"
-            :loading="deleting"
-          >Remove Network</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+            <template v-slot:item.subnet="{ value }">
+              <code class="font-mono text-caption" v-if="value">{{ value }}</code>
+              <span v-else class="text-caption text-grey-lighten-1">-</span>
+            </template>
 
-    <!-- Error Dialog -->
-    <v-dialog v-model="errorDialog" max-width="500px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2 text-error d-flex align-center">
-          <v-icon color="error" class="me-2">mdi-alert-circle</v-icon>
-          Network Deletion Failed
-        </v-card-title>
-        <v-card-text class="pa-6 pt-0">
-          <p class="mb-4">The network could not be deleted. This usually happens if it is still being used by one or more services or containers.</p>
-          <div class="bg-black bg-opacity-20 pa-4 rounded-lg font-mono text-caption text-error border border-error border-opacity-20">
-            {{ errorMessage }}
-          </div>
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="flat" color="primary" @click="errorDialog = false">Dismiss</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </div>
+            <template v-slot:item.gateway="{ value }">
+              <code class="font-mono text-caption" v-if="value">{{ value }}</code>
+              <span v-else class="text-caption text-grey-lighten-1">-</span>
+            </template>
+
+            <template v-slot:item.created_at="{ value }">
+              <RelativeTime :value="value" />
+            </template>
+
+            <template v-slot:item.actions="{ item }">
+              <v-btn
+                icon="mdi-delete-outline"
+                size="x-small"
+                variant="text"
+                color="error"
+                @click.stop="confirmDelete(item)"
+              ></v-btn>
+            </template>
+  </DataTablePage>
 </template>
 
 <script setup lang="ts">
+import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import RelativeTime from '../../components/RelativeTime.vue'

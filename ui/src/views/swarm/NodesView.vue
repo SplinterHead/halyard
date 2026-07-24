@@ -1,21 +1,20 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Cluster Nodes</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search nodes..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
+  <DataTablePage
+    title="Cluster Nodes"
+    :items="nodes"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-lan-disconnect"
+    empty-title="No nodes detected"
+    empty-description="Wait for the Halyard agent to report back from your cluster nodes."
+    search-placeholder="Search nodes..."
+    :sort-by="[{ key: 'hostname', order: 'asc' }]"
+    :row-props="getRowProps"
+    @refresh="fetchNodes"
+    @click:row="goToDetail"
+  >
+    <template v-slot:actions>
+      <v-btn
           prepend-icon="mdi-plus"
           color="primary"
           flat
@@ -23,192 +22,155 @@
         >
           Add Node
         </v-btn>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchNodes"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
+    </template>
+    <template v-slot:top>
+      <v-dialog v-model="joinDialog" max-width="700px">
+            <v-card border flat class="bg-surface glass-panel">
+              <v-card-title class="pa-6 pb-2 d-flex align-center">
+                <v-icon color="primary" class="me-2" size="24">mdi-docker</v-icon>
+                <span class="text-h5 font-weight-bold">Add Node to Swarm Cluster</span>
+                <v-spacer></v-spacer>
+                <v-btn icon="mdi-close" variant="text" size="small" @click="joinDialog = false"></v-btn>
+              </v-card-title>
+              
+              <v-card-text class="pa-6 pt-2">
+                <div v-if="loadingTokens" class="d-flex flex-column align-center py-8">
+                  <v-progress-linear indeterminate color="primary" style="width: 250px; border-radius: 4px;" class="mb-4"></v-progress-linear>
+                  <span class="text-body-2 text-grey">Retrieving Swarm Join Tokens...</span>
+                </div>
 
-    <v-divider class="my-4"></v-divider>
-    
-    <Loader :loading="loading" />
+                <div v-else-if="tokenError" class="text-center py-8">
+                  <v-icon color="error" size="48" class="mb-4">mdi-alert-circle-outline</v-icon>
+                  <h4 class="text-h6 text-error">Failed to fetch tokens</h4>
+                  <p class="text-body-2 text-grey mt-1">{{ tokenError }}</p>
+                </div>
 
-    <v-row v-if="nodes.length === 0 && !loading" justify="center" class="mt-8">
-      <v-col cols="12" md="6" class="text-center">
-        <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-lan-disconnect</v-icon>
-        <h3 class="text-h5 text-grey-darken-1">No nodes detected</h3>
-        <p class="text-body-1 text-grey-darken-1 mt-2">
-          Wait for the Halyard agent to report back from your cluster nodes.
-        </p>
-      </v-col>
-    </v-row>
+                <div v-else>
+                  <p class="text-body-2 text-grey mb-6">
+                    To expand your Docker Swarm cluster, execute the appropriate command below directly inside the terminal of the node you wish to join.
+                  </p>
 
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="nodes"
-        :search="searchQuery"
-        :sort-by="[{ key: 'hostname', order: 'asc' }]"
-        :row-props="getRowProps"
-        class="bg-transparent"
-        density="comfortable"
-        @click:row="goToDetail"
-        items-per-page="25"
-      >
-        <template v-slot:item.hostname="{ value }">
-          <span class="text-body-2 font-weight-bold">{{ value }}</span>
-        </template>
+                  <!-- Join as Worker -->
+                  <div class="mb-6">
+                    <div class="d-flex align-center justify-space-between mb-2">
+                      <span class="text-subtitle-2 font-weight-bold text-primary">Join as Worker (Recommended)</span>
+                      <v-btn
+                        size="x-small"
+                        variant="tonal"
+                        :prepend-icon="copiedWorker ? 'mdi-check' : 'mdi-content-copy'"
+                        :color="copiedWorker ? 'success' : 'default'"
+                        @click="copyWorker"
+                      >
+                        {{ copiedWorker ? 'Copied!' : 'Copy Command' }}
+                      </v-btn>
+                    </div>
+                    <div class="pa-4 bg-black bg-opacity-30 rounded-lg border border-opacity-10 position-relative font-mono text-caption overflow-x-auto text-grey-lighten-2" style="white-space: pre-wrap; font-family: var(--font-mono) !important;">
+                      {{ tokens.worker_command }}
+                    </div>
+                  </div>
 
-        <template v-slot:item.alerts="{ item }">
-          <div class="d-flex align-center justify-end gap-2">
-            <v-tooltip v-if="item.pending_updates > 0" text="Updates available" location="top">
-              <template v-slot:activator="{ props }">
-                <v-icon v-bind="props" size="small" color="info">mdi-package-down</v-icon>
-              </template>
-            </v-tooltip>
-            <v-tooltip v-if="item.restart_required" text="Restart required" location="top">
-              <template v-slot:activator="{ props }">
-                <v-icon v-bind="props" size="small" color="warning">mdi-restart</v-icon>
-              </template>
-            </v-tooltip>
-          </div>
-        </template>
+                  <!-- Join as Manager -->
+                  <div>
+                    <div class="d-flex align-center justify-space-between mb-2">
+                      <span class="text-subtitle-2 font-weight-bold text-secondary">Join as Manager</span>
+                      <v-btn
+                        size="x-small"
+                        variant="tonal"
+                        :prepend-icon="copiedManager ? 'mdi-check' : 'mdi-content-copy'"
+                        :color="copiedManager ? 'success' : 'default'"
+                        @click="copyManager"
+                      >
+                        {{ copiedManager ? 'Copied!' : 'Copy Command' }}
+                      </v-btn>
+                    </div>
+                    <div class="pa-4 bg-black bg-opacity-30 rounded-lg border border-opacity-10 position-relative font-mono text-caption overflow-x-auto text-grey-lighten-2" style="white-space: pre-wrap; font-family: var(--font-mono) !important;">
+                      {{ tokens.manager_command }}
+                    </div>
+                  </div>
 
-        <template v-slot:item.role="{ value }">
-          <div class="text-center text-caption text-uppercase font-weight-bold" :class="value === 'manager' ? 'text-primary' : 'text-grey'">
-            {{ value }}
-          </div>
-        </template>
+                  <!-- Alert banner -->
+                  <v-alert
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-6 text-caption"
+                    icon="mdi-information-outline"
+                  >
+                    Note: Make sure port <code class="text-primary font-weight-bold">2377/tcp</code> (Swarm clustering), <code class="text-primary font-weight-bold">7946/tcp/udp</code> (Node communication), and <code class="text-primary font-weight-bold">4789/udp</code> (Overlay network) are open on your firewalls.
+                  </v-alert>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-dialog>
+    </template>
+    <template v-slot:item.hostname="{ value }">
+              <span class="text-body-2 font-weight-bold">{{ value }}</span>
+            </template>
 
-        <template v-slot:item.ip="{ value }">
-          <code>{{ value }}</code>
-        </template>
+            <template v-slot:item.alerts="{ item }">
+              <div class="d-flex align-center justify-end gap-2">
+                <v-tooltip v-if="item.pending_updates > 0" text="Updates available" location="top">
+                  <template v-slot:activator="{ props }">
+                    <v-icon v-bind="props" size="small" color="info">mdi-package-down</v-icon>
+                  </template>
+                </v-tooltip>
+                <v-tooltip v-if="item.restart_required" text="Restart required" location="top">
+                  <template v-slot:activator="{ props }">
+                    <v-icon v-bind="props" size="small" color="warning">mdi-restart</v-icon>
+                  </template>
+                </v-tooltip>
+              </div>
+            </template>
 
-        <template v-slot:item.cpu_usage="{ value }">
-          <div style="width: 120px">
-            <v-progress-linear
-              :model-value="value"
-              color="primary"
-              height="18"
-              rounded
-            >
-              <template v-slot:default="{ value }">
-                <span class="text-caption font-weight-bold">{{ Math.ceil(value) }}%</span>
-              </template>
-            </v-progress-linear>
-          </div>
-        </template>
+            <template v-slot:item.role="{ value }">
+              <div class="text-center text-caption text-uppercase font-weight-bold" :class="value === 'manager' ? 'text-primary' : 'text-grey'">
+                {{ value }}
+              </div>
+            </template>
 
-        <template v-slot:item.memory_usage="{ item }">
-          <div class="d-flex flex-column" style="width: 150px">
-            <span class="text-caption text-grey-lighten-1">{{ formatBytes(item.memory_usage) }} / {{ formatBytes(item.memory_total) }}</span>
-            <v-progress-linear
-              :model-value="(item.memory_usage / item.memory_total) * 100"
-              color="secondary"
-              height="4"
-              rounded
-            ></v-progress-linear>
-          </div>
-        </template>
+            <template v-slot:item.ip="{ value }">
+              <code>{{ value }}</code>
+            </template>
 
-        <template v-slot:item.version="{ value }">
-          <code>{{ value }}</code>
-        </template>
-
-        <template v-slot:item.uptime="{ value }">
-          <span class="text-caption">{{ formatUptime(value) }}</span>
-        </template>
-
-      </v-data-table>
-    </div>
-  </div>
-
-    <!-- Swarm Join Dialog -->
-    <v-dialog v-model="joinDialog" max-width="700px">
-      <v-card border flat class="bg-surface glass-panel">
-        <v-card-title class="pa-6 pb-2 d-flex align-center">
-          <v-icon color="primary" class="me-2" size="24">mdi-docker</v-icon>
-          <span class="text-h5 font-weight-bold">Add Node to Swarm Cluster</span>
-          <v-spacer></v-spacer>
-          <v-btn icon="mdi-close" variant="text" size="small" @click="joinDialog = false"></v-btn>
-        </v-card-title>
-        
-        <v-card-text class="pa-6 pt-2">
-          <div v-if="loadingTokens" class="d-flex flex-column align-center py-8">
-            <v-progress-linear indeterminate color="primary" style="width: 250px; border-radius: 4px;" class="mb-4"></v-progress-linear>
-            <span class="text-body-2 text-grey">Retrieving Swarm Join Tokens...</span>
-          </div>
-
-          <div v-else-if="tokenError" class="text-center py-8">
-            <v-icon color="error" size="48" class="mb-4">mdi-alert-circle-outline</v-icon>
-            <h4 class="text-h6 text-error">Failed to fetch tokens</h4>
-            <p class="text-body-2 text-grey mt-1">{{ tokenError }}</p>
-          </div>
-
-          <div v-else>
-            <p class="text-body-2 text-grey mb-6">
-              To expand your Docker Swarm cluster, execute the appropriate command below directly inside the terminal of the node you wish to join.
-            </p>
-
-            <!-- Join as Worker -->
-            <div class="mb-6">
-              <div class="d-flex align-center justify-space-between mb-2">
-                <span class="text-subtitle-2 font-weight-bold text-primary">Join as Worker (Recommended)</span>
-                <v-btn
-                  size="x-small"
-                  variant="tonal"
-                  :prepend-icon="copiedWorker ? 'mdi-check' : 'mdi-content-copy'"
-                  :color="copiedWorker ? 'success' : 'default'"
-                  @click="copyWorker"
+            <template v-slot:item.cpu_usage="{ value }">
+              <div style="width: 120px">
+                <v-progress-linear
+                  :model-value="value"
+                  color="primary"
+                  height="18"
+                  rounded
                 >
-                  {{ copiedWorker ? 'Copied!' : 'Copy Command' }}
-                </v-btn>
+                  <template v-slot:default="{ value }">
+                    <span class="text-caption font-weight-bold">{{ Math.ceil(value) }}%</span>
+                  </template>
+                </v-progress-linear>
               </div>
-              <div class="pa-4 bg-black bg-opacity-30 rounded-lg border border-opacity-10 position-relative font-mono text-caption overflow-x-auto text-grey-lighten-2" style="white-space: pre-wrap; font-family: var(--font-mono) !important;">
-                {{ tokens.worker_command }}
-              </div>
-            </div>
+            </template>
 
-            <!-- Join as Manager -->
-            <div>
-              <div class="d-flex align-center justify-space-between mb-2">
-                <span class="text-subtitle-2 font-weight-bold text-secondary">Join as Manager</span>
-                <v-btn
-                  size="x-small"
-                  variant="tonal"
-                  :prepend-icon="copiedManager ? 'mdi-check' : 'mdi-content-copy'"
-                  :color="copiedManager ? 'success' : 'default'"
-                  @click="copyManager"
-                >
-                  {{ copiedManager ? 'Copied!' : 'Copy Command' }}
-                </v-btn>
+            <template v-slot:item.memory_usage="{ item }">
+              <div class="d-flex flex-column" style="width: 150px">
+                <span class="text-caption text-grey-lighten-1">{{ formatBytes(item.memory_usage) }} / {{ formatBytes(item.memory_total) }}</span>
+                <v-progress-linear
+                  :model-value="(item.memory_usage / item.memory_total) * 100"
+                  color="secondary"
+                  height="4"
+                  rounded
+                ></v-progress-linear>
               </div>
-              <div class="pa-4 bg-black bg-opacity-30 rounded-lg border border-opacity-10 position-relative font-mono text-caption overflow-x-auto text-grey-lighten-2" style="white-space: pre-wrap; font-family: var(--font-mono) !important;">
-                {{ tokens.manager_command }}
-              </div>
-            </div>
+            </template>
 
-            <!-- Alert banner -->
-            <v-alert
-              type="info"
-              variant="tonal"
-              density="compact"
-              class="mt-6 text-caption"
-              icon="mdi-information-outline"
-            >
-              Note: Make sure port <code class="text-primary font-weight-bold">2377/tcp</code> (Swarm clustering), <code class="text-primary font-weight-bold">7946/tcp/udp</code> (Node communication), and <code class="text-primary font-weight-bold">4789/udp</code> (Overlay network) are open on your firewalls.
-            </v-alert>
-          </div>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
+            <template v-slot:item.version="{ value }">
+              <code>{{ value }}</code>
+            </template>
+
+            <template v-slot:item.uptime="{ value }">
+              <span class="text-caption">{{ formatUptime(value) }}</span>
+            </template>
+  </DataTablePage>
 </template>
+
 <script setup lang="ts">
+import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Loader from '../../components/Loader.vue'

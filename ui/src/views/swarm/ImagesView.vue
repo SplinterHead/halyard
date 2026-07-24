@@ -1,21 +1,19 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Cluster Images</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search images..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
+  <DataTablePage
+    title="Node Images"
+    :items="images"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-image-broken-variant"
+    empty-title="No images found"
+    empty-description="No images are currently downloaded on any of the cluster nodes."
+    search-placeholder="Search images..."
+    :sort-by="[{ key: 'repo_tags', order: 'asc' }]"
+    :row-props="getRowProps"
+    @refresh="fetchImages"
+  >
+    <template v-slot:actions>
+      <v-btn
           prepend-icon="mdi-layers-search-outline"
           @click="checkAllImages"
           :loading="checkingAll"
@@ -25,170 +23,134 @@
         >
           Check All Updates
         </v-btn>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchImages"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
+    </template>
+    <template v-slot:top>
+      <v-dialog v-model="deleteDialog" max-width="450px" persistent>
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2 d-flex align-center">
+                <v-icon color="error" class="me-2">mdi-alert-circle-outline</v-icon>
+                <span class="text-h6 font-weight-bold">Delete Docker Image?</span>
+              </v-card-title>
+              
+              <v-card-text class="pa-6 pt-2">
+                <p class="text-body-2 mb-4">
+                  Are you sure you want to remove this image tag from <strong>{{ imageToDelete?.node }}</strong>?
+                </p>
+                <div class="bg-black bg-opacity-20 rounded-lg pa-3 mb-4 font-mono text-caption">
+                  <div><strong>Image:</strong> {{ imageToDelete?.repository }}:{{ imageToDelete?.tag }}</div>
+                  <div class="text-truncate-200"><strong>ID:</strong> {{ imageToDelete?.id }}</div>
+                  <div><strong>Node:</strong> {{ imageToDelete?.node }}</div>
+                </div>
+                
+                <v-alert
+                  v-if="imageToDelete?.in_use"
+                  type="warning"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-4 text-caption"
+                >
+                  This image is currently in use by one or more containers. Deleting it standardly will fail unless you force it.
+                </v-alert>
 
-    <v-divider class="my-4"></v-divider>
+                <v-checkbox
+                  v-model="forceDelete"
+                  label="Force delete image (equivalent to rmi -f)"
+                  color="error"
+                  density="compact"
+                  hide-details
+                ></v-checkbox>
+              </v-card-text>
 
-    <Loader :loading="loading" />
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" @click="closeDeleteDialog" :disabled="deleting">Cancel</v-btn>
+                <v-btn
+                  color="error"
+                  variant="flat"
+                  @click="deleteImage"
+                  :loading="deleting"
+                >
+                  Delete
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+    </template>
+    <!-- Repository Column (with registry icon) -->
+            <template v-slot:item.repository="{ item }">
+              <div class="d-flex align-center">
+                <v-icon
+                  :icon="getRegistryIcon(item.repository)"
+                  color="primary"
+                  size="20"
+                  class="me-3"
+                ></v-icon>
+                <div class="d-flex flex-column">
+                  <span class="text-body-2 font-weight-bold text-truncate-400" :title="item.repository">
+                    {{ item.repository.split('@')[0] }}
+                  </span>
+                  <span class="text-caption text-grey text-truncate-200 font-mono" :title="item.tag">
+                    {{ item.tag.split('@')[0] }}
+                  </span>
+                </div>
+              </div>
+            </template>
 
-    <!-- Data Table -->
-    <div v-if="images.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
-      <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-image-off-outline</v-icon>
-      <h3 class="text-h5 text-grey-darken-1">No Images Found</h3>
-      <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
-        No Docker images were found stored on any active Swarm node.
-      </p>
-    </div>
+            <!-- SHA Column -->
+            <template v-slot:item.id="{ value }">
+              <code class="font-mono text-caption text-grey" :title="value">
+                {{ value.replace('sha256:', '').substring(0, 12) }}
+              </code>
+            </template>
 
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="images"
-        :search="searchQuery"
-        :row-props="getRowProps"
-        item-value="ui_key"
-        class="bg-transparent"
-        hover
-        density="comfortable"
-        items-per-page="25"
-      >
-        <!-- Repository Column (with registry icon) -->
-        <template v-slot:item.repository="{ item }">
-          <div class="d-flex align-center">
-            <v-icon
-              :icon="getRegistryIcon(item.repository)"
-              color="primary"
-              size="20"
-              class="me-3"
-            ></v-icon>
-            <div class="d-flex flex-column">
-              <span class="text-body-2 font-weight-bold text-truncate-400" :title="item.repository">
-                {{ item.repository.split('@')[0] }}
-              </span>
-              <span class="text-caption text-grey text-truncate-200 font-mono" :title="item.tag">
-                {{ item.tag.split('@')[0] }}
-              </span>
-            </div>
-          </div>
-        </template>
+            <!-- Architecture Column -->
+            <template v-slot:item.architecture="{ value }">
+              <v-chip size="x-small" variant="outlined" color="primary" label class="font-mono text-uppercase">
+                {{ value }}
+              </v-chip>
+            </template>
 
-        <!-- SHA Column -->
-        <template v-slot:item.id="{ value }">
-          <code class="font-mono text-caption text-grey" :title="value">
-            {{ value.replace('sha256:', '').substring(0, 12) }}
-          </code>
-        </template>
+            <!-- Node Column -->
+            <template v-slot:item.node="{ value }">
+              <code>{{ value }}</code>
+            </template>
 
-        <!-- Architecture Column -->
-        <template v-slot:item.architecture="{ value }">
-          <v-chip size="x-small" variant="outlined" color="primary" label class="font-mono text-uppercase">
-            {{ value }}
-          </v-chip>
-        </template>
+            <!-- Size Column -->
+            <template v-slot:item.size="{ value }">
+              <span class="text-body-2">{{ formatSize(value) }}</span>
+            </template>
 
-        <!-- Node Column -->
-        <template v-slot:item.node="{ value }">
-          <code>{{ value }}</code>
-        </template>
+            <!-- In Use Column -->
+            <template v-slot:item.in_use="{ value }">
+              <v-chip
+                size="x-small"
+                :color="value ? 'success' : 'grey'"
+                variant="tonal"
+                label
+              >
+                {{ value ? 'In Use' : 'Unused' }}
+              </v-chip>
+            </template>
 
-        <!-- Size Column -->
-        <template v-slot:item.size="{ value }">
-          <span class="text-body-2">{{ formatSize(value) }}</span>
-        </template>
-
-        <!-- In Use Column -->
-        <template v-slot:item.in_use="{ value }">
-          <v-chip
-            size="x-small"
-            :color="value ? 'success' : 'grey'"
-            variant="tonal"
-            label
-          >
-            {{ value ? 'In Use' : 'Unused' }}
-          </v-chip>
-        </template>
-
-        <!-- Actions Column -->
-        <template v-slot:item.actions="{ item }">
-          <div class="d-flex align-center justify-center gap-1">
-            <!-- Delete Action Button -->
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              color="error"
-              @click="confirmDelete(item)"
-              title="Delete Image"
-            ></v-btn>
-          </div>
-        </template>
-      </v-data-table>
-    </div>
-
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="450px" persistent>
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2 d-flex align-center">
-          <v-icon color="error" class="me-2">mdi-alert-circle-outline</v-icon>
-          <span class="text-h6 font-weight-bold">Delete Docker Image?</span>
-        </v-card-title>
-        
-        <v-card-text class="pa-6 pt-2">
-          <p class="text-body-2 mb-4">
-            Are you sure you want to remove this image tag from <strong>{{ imageToDelete?.node }}</strong>?
-          </p>
-          <div class="bg-black bg-opacity-20 rounded-lg pa-3 mb-4 font-mono text-caption">
-            <div><strong>Image:</strong> {{ imageToDelete?.repository }}:{{ imageToDelete?.tag }}</div>
-            <div class="text-truncate-200"><strong>ID:</strong> {{ imageToDelete?.id }}</div>
-            <div><strong>Node:</strong> {{ imageToDelete?.node }}</div>
-          </div>
-          
-          <v-alert
-            v-if="imageToDelete?.in_use"
-            type="warning"
-            variant="tonal"
-            density="compact"
-            class="mb-4 text-caption"
-          >
-            This image is currently in use by one or more containers. Deleting it standardly will fail unless you force it.
-          </v-alert>
-
-          <v-checkbox
-            v-model="forceDelete"
-            label="Force delete image (equivalent to rmi -f)"
-            color="error"
-            density="compact"
-            hide-details
-          ></v-checkbox>
-        </v-card-text>
-
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeDeleteDialog" :disabled="deleting">Cancel</v-btn>
-          <v-btn
-            color="error"
-            variant="flat"
-            @click="deleteImage"
-            :loading="deleting"
-          >
-            Delete
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </div>
+            <!-- Actions Column -->
+            <template v-slot:item.actions="{ item }">
+              <div class="d-flex align-center justify-center gap-1">
+                <!-- Delete Action Button -->
+                <v-btn
+                  icon="mdi-delete-outline"
+                  size="x-small"
+                  variant="text"
+                  color="error"
+                  @click="confirmDelete(item)"
+                  title="Delete Image"
+                ></v-btn>
+              </div>
+            </template>
+  </DataTablePage>
 </template>
 
 <script setup lang="ts">
+import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, computed, onMounted } from 'vue'
 import Loader from '../../components/Loader.vue'
 

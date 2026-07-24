@@ -1,21 +1,19 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Swarm Volumes</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search volumes..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
+  <DataTablePage
+    title="Swarm Volumes"
+    :items="volumes"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-database-off"
+    empty-title="No volumes found"
+    empty-description="Volumes created by your services or manually will appear here once detected."
+    search-placeholder="Search volumes..."
+    :sort-by="[{ key: 'name', order: 'asc' }]"
+    :row-props="getRowProps"
+    @refresh="fetchVolumes"
+  >
+    <template v-slot:actions>
+      <v-btn
           prepend-icon="mdi-broom"
           color="error"
           variant="tonal"
@@ -24,186 +22,138 @@
         >
           Prune Unused
         </v-btn>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchVolumes"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
+    </template>
+    <template v-slot:top>
+      <v-dialog v-model="showPruneDialog" max-width="500">
+            <v-card>
+              <v-card-title class="text-h5">Prune Unused Volumes?</v-card-title>
+              <v-card-text>
+                This will remove ALL volumes on ALL nodes that are not currently used by at least one container.
+                This action cannot be undone.
+              </v-card-text>
+              <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn color="grey-darken-1" variant="text" @click="showPruneDialog = false">Cancel</v-btn>
+                <v-btn color="error" variant="flat" @click="pruneVolumes" :loading="pruning">Prune Volumes</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+      <v-dialog v-model="deleteDialog" max-width="450px">
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
+                <v-icon color="error" class="me-2">mdi-alert-decagram</v-icon>
+                Delete Volume?
+              </v-card-title>
+              <v-card-text class="pa-6 pt-2">
+                Are you sure you want to remove the volume <strong class="font-mono text-error">{{ volumeToDelete?.name }}</strong> on node <strong>{{ volumeToDelete?.node }}</strong>? This action cannot be undone.
+              </v-card-text>
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+                <v-btn
+                  color="error"
+                  variant="flat"
+                  @click="deleteVolume"
+                  :loading="deleting"
+                >Remove Volume</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+      <v-dialog v-model="errorDialog" max-width="500px">
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2 text-error d-flex align-center">
+                <v-icon color="error" class="me-2">mdi-alert-circle</v-icon>
+                Volume Deletion Failed
+              </v-card-title>
+              <v-card-text class="pa-6 pt-0">
+                <p class="mb-4">The volume could not be deleted. This usually happens if it is still being used by one or more containers on the node.</p>
+                <div class="bg-black bg-opacity-20 pa-4 rounded-lg font-mono text-caption text-error border border-error border-opacity-20">
+                  {{ errorMessage }}
+                </div>
+              </v-card-text>
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="flat" color="primary" @click="errorDialog = false">Dismiss</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+    </template>
+    <template v-slot:item.name="{ item }">
+              <span class="text-body-2 font-weight-bold" :title="item.name">
+                {{ item.name }}
+              </span>
+            </template>
 
-    <!-- Prune Confirmation Dialog -->
-    <v-dialog v-model="showPruneDialog" max-width="500">
-      <v-card>
-        <v-card-title class="text-h5">Prune Unused Volumes?</v-card-title>
-        <v-card-text>
-          This will remove ALL volumes on ALL nodes that are not currently used by at least one container.
-          This action cannot be undone.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="grey-darken-1" variant="text" @click="showPruneDialog = false">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="pruneVolumes" :loading="pruning">Prune Volumes</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="450px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
-          <v-icon color="error" class="me-2">mdi-alert-decagram</v-icon>
-          Delete Volume?
-        </v-card-title>
-        <v-card-text class="pa-6 pt-2">
-          Are you sure you want to remove the volume <strong class="font-mono text-error">{{ volumeToDelete?.name }}</strong> on node <strong>{{ volumeToDelete?.node }}</strong>? This action cannot be undone.
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn
-            color="error"
-            variant="flat"
-            @click="deleteVolume"
-            :loading="deleting"
-          >Remove Volume</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Error Dialog -->
-    <v-dialog v-model="errorDialog" max-width="500px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2 text-error d-flex align-center">
-          <v-icon color="error" class="me-2">mdi-alert-circle</v-icon>
-          Volume Deletion Failed
-        </v-card-title>
-        <v-card-text class="pa-6 pt-0">
-          <p class="mb-4">The volume could not be deleted. This usually happens if it is still being used by one or more containers on the node.</p>
-          <div class="bg-black bg-opacity-20 pa-4 rounded-lg font-mono text-caption text-error border border-error border-opacity-20">
-            {{ errorMessage }}
-          </div>
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="flat" color="primary" @click="errorDialog = false">Dismiss</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-divider class="my-4"></v-divider>
-    
-    <Loader :loading="loading" />
-
-    <v-row v-if="volumes.length === 0 && !loading" justify="center" class="mt-8">
-      <v-col cols="12" md="6" class="text-center">
-        <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-database-off</v-icon>
-        <h3 class="text-h5 text-grey-darken-1">No volumes found</h3>
-        <p class="text-body-1 text-grey-darken-1 mt-2">
-          Volumes created by your services or manually will appear here once detected.
-        </p>
-      </v-col>
-    </v-row>
-
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="volumes"
-        :search="searchQuery"
-        :sort-by="[{ key: 'name', order: 'asc' }]"
-        :row-props="getRowProps"
-        class="bg-transparent"
-        density="comfortable"
-        items-per-page="25"
-      >
-        <template v-slot:item.name="{ item }">
-          <span class="text-body-2 font-weight-bold" :title="item.name">
-            {{ item.name }}
-          </span>
-        </template>
-
-        <template v-slot:item.stack="{ value }">
-          <div class="text-start">
-            <v-chip v-if="value !== '-'" size="x-small" variant="tonal" color="primary" label>
-              {{ value }}
-            </v-chip>
-            <span v-else class="text-caption text-grey-lighten-1">-</span>
-          </div>
-        </template>
+            <template v-slot:item.stack="{ value }">
+              <div class="text-start">
+                <v-chip v-if="value !== '-'" size="x-small" variant="tonal" color="primary" label>
+                  {{ value }}
+                </v-chip>
+                <span v-else class="text-caption text-grey-lighten-1">-</span>
+              </div>
+            </template>
 
 
-        <template v-slot:item.driver="{ value }">
-          <div class="text-center">
-            <v-chip
-              :color="getDriverColor(value)"
-              size="x-small"
-              label
-              class="text-uppercase font-weight-bold"
-            >
-              {{ value }}
-            </v-chip>
-          </div>
-        </template>
+            <template v-slot:item.driver="{ value }">
+              <div class="text-center">
+                <v-chip
+                  :color="getDriverColor(value)"
+                  size="x-small"
+                  label
+                  class="text-uppercase font-weight-bold"
+                >
+                  {{ value }}
+                </v-chip>
+              </div>
+            </template>
 
-        <template v-slot:item.type="{ value }">
-          <div class="text-center">
-            <v-chip
-              :color="getTypeColor(value)"
-              size="x-small"
-              label
-              class="text-uppercase font-weight-bold"
-            >
-              {{ value }}
-            </v-chip>
-          </div>
-        </template>
+            <template v-slot:item.type="{ value }">
+              <div class="text-center">
+                <v-chip
+                  :color="getTypeColor(value)"
+                  size="x-small"
+                  label
+                  class="text-uppercase font-weight-bold"
+                >
+                  {{ value }}
+                </v-chip>
+              </div>
+            </template>
 
-        <template v-slot:item.node="{ value }">
-          <code>{{ value }}</code>
-        </template>
+            <template v-slot:item.node="{ value }">
+              <code>{{ value }}</code>
+            </template>
 
-        <template v-slot:item.created_at="{ value }">
-          <RelativeTime :value="value" />
-        </template>
+            <template v-slot:item.created_at="{ value }">
+              <RelativeTime :value="value" />
+            </template>
 
-        <template v-slot:item.actions="{ item }">
-          <div class="d-flex justify-center align-center">
-            <v-btn
-              icon="mdi-folder-search-outline"
-              size="x-small"
-              variant="text"
-              color="primary"
-              class="mr-2"
-              @click.stop="openExplorer(item)"
-              title="Browse Volume Files"
-            ></v-btn>
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              color="error"
-              @click.stop="confirmDelete(item)"
-              title="Delete Volume"
-            ></v-btn>
-          </div>
-        </template>
-
-      </v-data-table>
-    </div>
-
-    <!-- Volume Explorer Dialog -->
-    <VolumeExplorerDialog
-      v-model="explorerDialog"
-      :volume-name="selectedVolumeName"
-      :node-name="selectedNodeName"
-    />
-  </div>
+            <template v-slot:item.actions="{ item }">
+              <div class="d-flex justify-center align-center">
+                <v-btn
+                  icon="mdi-folder-search-outline"
+                  size="x-small"
+                  variant="text"
+                  color="primary"
+                  class="mr-2"
+                  @click.stop="openExplorer(item)"
+                  title="Browse Volume Files"
+                ></v-btn>
+                <v-btn
+                  icon="mdi-delete-outline"
+                  size="x-small"
+                  variant="text"
+                  color="error"
+                  @click.stop="confirmDelete(item)"
+                  title="Delete Volume"
+                ></v-btn>
+              </div>
+            </template>
+  </DataTablePage>
 </template>
 
 <script setup lang="ts">
+import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from 'vue'
 import Loader from '../../components/Loader.vue'
 import RelativeTime from '../../components/RelativeTime.vue'

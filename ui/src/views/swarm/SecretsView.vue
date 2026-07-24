@@ -1,21 +1,18 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Swarm Secrets</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search secrets..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
+  <DataTablePage
+    title="Swarm Secrets"
+    :items="secrets"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-key-remove"
+    empty-title="No secrets found"
+    empty-description="Create secrets to securely pass sensitive data like passwords and tokens to your services."
+    search-placeholder="Search secrets..."
+    :sort-by="[{ key: 'name', order: 'asc' }]"
+    @refresh="fetchSecrets"
+  >
+    <template v-slot:actions>
+      <v-btn
           prepend-icon="mdi-plus"
           color="primary"
           @click="dialog = true"
@@ -23,135 +20,98 @@
         >
           Create Secret
         </v-btn>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchSecrets"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
+    </template>
+    <template v-slot:top>
+      <v-dialog v-model="dialog" max-width="600px" persistent>
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2">
+                <span class="text-h5 font-weight-bold">Create Swarm Secret</span>
+              </v-card-title>
+              
+              <v-card-text class="pa-6 pt-2">
+                <v-form ref="form" v-model="valid">
+                  <v-text-field
+                    v-model="newSecret.name"
+                    label="Secret Name"
+                    placeholder="db_password"
+                    variant="outlined"
+                    density="comfortable"
+                    :rules="[v => !!v || 'Name is required']"
+                    required
+                    class="mb-4"
+                  ></v-text-field>
 
-    <v-divider class="my-4"></v-divider>
+                  <v-textarea
+                    v-model="newSecret.data"
+                    label="Secret Data"
+                    placeholder="Paste your secret content here..."
+                    variant="outlined"
+                    density="comfortable"
+                    :rules="[v => !!v || 'Data is required']"
+                    required
+                    rows="6"
+                    auto-grow
+                  ></v-textarea>
+                </v-form>
+              </v-card-text>
 
-    <Loader :loading="loading" />
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" @click="closeDialog" :disabled="saving">Cancel</v-btn>
+                <v-btn
+                  color="primary"
+                  variant="flat"
+                  @click="createSecret"
+                  :loading="saving"
+                  :disabled="!valid"
+                >
+                  Create
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+      <v-dialog v-model="deleteDialog" max-width="400px">
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2">Remove Secret?</v-card-title>
+              <v-card-text class="pa-6 pt-0">
+                Are you sure you want to remove the secret <strong>{{ secretToDelete?.name }}</strong>? This will fail if it's currently in use by any services.
+              </v-card-text>
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+                <v-btn color="error" variant="flat" @click="deleteSecret" :loading="deleting">Remove</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+    </template>
+    <template v-slot:item.name="{ value }">
+              <span class="text-body-2 font-weight-bold">{{ value }}</span>
+            </template>
 
-    <div v-if="secrets.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
-      <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-lock-outline</v-icon>
-      <h3 class="text-h5 text-grey-darken-1">No Secrets Found</h3>
-      <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
-        Swarm secrets allow you to store sensitive information, such as passwords and certificates, securely in the swarm. Use the button above to create your first secret.
-      </p>
-    </div>
+            <template v-slot:item.id="{ value }">
+              <code class="text-caption">{{ value.substring(0, 12) }}</code>
+            </template>
 
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="secrets"
-        :search="searchQuery"
-        :sort-by="[{ key: 'name', order: 'asc' }]"
-        class="bg-transparent"
-        hover
-        density="comfortable"
-        items-per-page="25"
-      >
-        <template v-slot:item.name="{ value }">
-          <span class="text-body-2 font-weight-bold">{{ value }}</span>
-        </template>
+            <template v-slot:item.created_at="{ value }">
+              <RelativeTime :value="value" />
+            </template>
 
-        <template v-slot:item.id="{ value }">
-          <code class="text-caption">{{ value.substring(0, 12) }}</code>
-        </template>
-
-        <template v-slot:item.created_at="{ value }">
-          <RelativeTime :value="value" />
-        </template>
-
-        <template v-slot:item.actions="{ item }">
-          <div class="d-flex justify-center">
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              color="error"
-              @click="confirmDelete(item)"
-            ></v-btn>
-          </div>
-        </template>
-
-      </v-data-table>
-    </div>
-
-    <!-- Create Secret Dialog -->
-    <v-dialog v-model="dialog" max-width="600px" persistent>
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2">
-          <span class="text-h5 font-weight-bold">Create Swarm Secret</span>
-        </v-card-title>
-        
-        <v-card-text class="pa-6 pt-2">
-          <v-form ref="form" v-model="valid">
-            <v-text-field
-              v-model="newSecret.name"
-              label="Secret Name"
-              placeholder="db_password"
-              variant="outlined"
-              density="comfortable"
-              :rules="[v => !!v || 'Name is required']"
-              required
-              class="mb-4"
-            ></v-text-field>
-
-            <v-textarea
-              v-model="newSecret.data"
-              label="Secret Data"
-              placeholder="Paste your secret content here..."
-              variant="outlined"
-              density="comfortable"
-              :rules="[v => !!v || 'Data is required']"
-              required
-              rows="6"
-              auto-grow
-            ></v-textarea>
-          </v-form>
-        </v-card-text>
-
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeDialog" :disabled="saving">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            @click="createSecret"
-            :loading="saving"
-            :disabled="!valid"
-          >
-            Create
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2">Remove Secret?</v-card-title>
-        <v-card-text class="pa-6 pt-0">
-          Are you sure you want to remove the secret <strong>{{ secretToDelete?.name }}</strong>? This will fail if it's currently in use by any services.
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="deleteSecret" :loading="deleting">Remove</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </div>
+            <template v-slot:item.actions="{ item }">
+              <div class="d-flex justify-center">
+                <v-btn
+                  icon="mdi-delete-outline"
+                  size="x-small"
+                  variant="text"
+                  color="error"
+                  @click="confirmDelete(item)"
+                ></v-btn>
+              </div>
+            </template>
+  </DataTablePage>
 </template>
 
 <script setup lang="ts">
+import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from 'vue'
 import RelativeTime from '../../components/RelativeTime.vue'
 import Loader from '../../components/Loader.vue'

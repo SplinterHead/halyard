@@ -1,129 +1,82 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Swarm Stacks</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search stacks..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchStacks"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
+  <DataTablePage
+    title="Swarm Stacks"
+    :items="stacks"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-layers-off-outline"
+    empty-title="No stacks deployed"
+    empty-description="Deploy your first docker-compose stack to see it managed here."
+    search-placeholder="Search stacks..."
+    :sort-by="[{ key: 'name', order: 'asc' }]"
+    :row-props="getRowProps"
+    @refresh="fetchStacks"
+    @click:row="goToDetail"
+  >
+    <template v-slot:top>
+      <v-dialog v-model="deleteDialog" max-width="400px">
+            <v-card border flat class="bg-surface">
+              <v-card-title class="pa-6 pb-2">Delete Stack?</v-card-title>
+              <v-card-text class="pa-6 pt-0">
+                Are you sure you want to remove the stack
+                <strong>{{ stackToDelete?.name }}</strong
+                >? This will stop and remove all associated services.
+              </v-card-text>
+              <v-card-actions class="pa-6 pt-0">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+                <v-btn
+                  color="error"
+                  variant="flat"
+                  @click="deleteStack"
+                  :loading="deleting"
+                  >Remove Stack</v-btn
+                >
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+    </template>
+    <template v-slot:item.name="{ value }">
+              <span class="text-body-1 font-weight-medium">{{ value }}</span>
+            </template>
 
-    <v-divider class="my-4"></v-divider>
+            <template v-slot:item.services="{ value }">
+              <code class="text-caption">{{ value }}</code>
+            </template>
 
-    <Loader :loading="loading" />
+            <template v-slot:item.updated_at="{ value }">
+              <RelativeTime :value="value" />
+            </template>
 
-    <v-row v-if="stacks.length === 0 && !loading" justify="center" class="mt-8">
-      <v-col cols="12" md="6" class="text-center">
-        <v-icon size="64" color="grey-lighten-1" class="mb-4"
-          >mdi-layers-off-outline</v-icon
-        >
-        <h3 class="text-h5 text-grey-darken-1">No stacks found</h3>
-        <p class="text-body-1 text-grey-darken-1 mt-2">
-          Deploy a stack using the GitOps workflow or the Docker CLI to see it
-          here.
-        </p>
-      </v-col>
-    </v-row>
-
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="stacks"
-        :search="searchQuery"
-        :sort-by="[{ key: 'name', order: 'asc' }]"
-        :row-props="getRowProps"
-        class="bg-transparent"
-        density="comfortable"
-        @click:row="goToDetail"
-        items-per-page="25"
-      >
-        <template v-slot:item.name="{ value }">
-          <span class="text-body-1 font-weight-medium">{{ value }}</span>
-        </template>
-
-        <template v-slot:item.services="{ value }">
-          <code class="text-caption">{{ value }}</code>
-        </template>
-
-        <template v-slot:item.updated_at="{ value }">
-          <RelativeTime :value="value" />
-        </template>
-
-        <template v-slot:item.actions="{ item }">
-          <div class="d-flex justify-center">
-            <v-btn
-              v-if="item.name !== 'Orphaned/Manual'"
-              icon="mdi-restart"
-              size="x-small"
-              variant="text"
-              color="warning"
-              :loading="restartingStack === item.name"
-              @click.stop="restartStack(item.name)"
-              title="Force Restart"
-            ></v-btn>
-            <v-btn
-              v-if="item.name !== 'Orphaned/Manual'"
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              color="error"
-              @click.stop="confirmDelete(item)"
-            ></v-btn>
-          </div>
-        </template>
-
-      </v-data-table>
-    </div>
-
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2">Delete Stack?</v-card-title>
-        <v-card-text class="pa-6 pt-0">
-          Are you sure you want to remove the stack
-          <strong>{{ stackToDelete?.name }}</strong
-          >? This will stop and remove all associated services.
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn
-            color="error"
-            variant="flat"
-            @click="deleteStack"
-            :loading="deleting"
-            >Remove Stack</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </div>
+            <template v-slot:item.actions="{ item }">
+              <div class="d-flex justify-center">
+                <v-btn
+                  v-if="item.name !== 'Orphaned/Manual'"
+                  icon="mdi-restart"
+                  size="x-small"
+                  variant="text"
+                  color="warning"
+                  :loading="restartingStack === item.name"
+                  @click.stop="restartStack(item.name)"
+                  title="Force Restart"
+                ></v-btn>
+                <v-btn
+                  v-if="item.name !== 'Orphaned/Manual'"
+                  icon="mdi-delete-outline"
+                  size="x-small"
+                  variant="text"
+                  color="error"
+                  @click.stop="confirmDelete(item)"
+                ></v-btn>
+              </div>
+            </template>
+  </DataTablePage>
 </template>
 
 <script setup lang="ts">
+import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import Loader from "../../components/Loader.vue";
-
-const searchQuery = ref("");
 import RelativeTime from "../../components/RelativeTime.vue";
 
 const router = useRouter();

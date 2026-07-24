@@ -1,131 +1,88 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Cluster Containers</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search containers..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchContainers"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
+  <DataTablePage
+    title="Cluster Containers"
+    :items="containers"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-package-variant-closed-remove"
+    empty-title="No containers found"
+    empty-description="Your cluster is currently empty. Deploy services or stacks to see containers here."
+    search-placeholder="Search containers..."
+    :sort-by="[{ key: 'names', order: 'asc' }]"
+    :row-props="getRowProps"
+    @refresh="fetchContainers"
+    @click:row="goToDetail"
+  >
+    <template v-slot:item.names="{ item }">
+              <div class="d-flex flex-column">
+                <span
+                  class="text-body-2 font-weight-bold truncate-text"
+                  :title="formatNames(item.names)"
+                >
+                  {{ formatNames(item.names) }}
+                </span>
+                <span
+                  class="text-caption text-primary truncate-text me-1"
+                  :title="item.image"
+                >
+                  {{ formatImage(item.image) }}
+                </span>
+              </div>
+            </template>
 
-    <v-divider class="my-4"></v-divider>
+            <template v-slot:item.up_to_date="{ item }">
+              <div class="text-center">
+                <v-chip
+                  v-if="!item.up_to_date"
+                  color="warning"
+                  size="x-small"
+                  label
+                  class="text-uppercase font-weight-bold"
+                >
+                  Out of Date
+                </v-chip>
+                <v-chip
+                  v-else
+                  color="success"
+                  variant="tonal"
+                  size="x-small"
+                  label
+                  class="text-uppercase font-weight-bold"
+                >
+                  Current
+                </v-chip>
+              </div>
+            </template>
 
-    <Loader :loading="loading" />
+            <template v-slot:item.service="{ item }">
+              <div class="d-flex flex-column">
+                <span class="text-caption font-weight-bold">{{
+                  item.service
+                }}</span>
+                <span class="text-caption text-grey">{{ item.stack }}</span>
+              </div>
+            </template>
 
-    <v-row v-if="containers.length === 0 && !loading" justify="center" class="mt-8">
-      <v-col cols="12" md="6" class="text-center">
-        <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-package-variant-closed-remove</v-icon>
-        <h3 class="text-h5 text-grey-darken-1">No containers found</h3>
-        <p class="text-body-1 text-grey-darken-1 mt-2">
-          Your cluster is currently empty. Deploy services or stacks to see containers here.
-        </p>
-      </v-col>
-    </v-row>
+            <template v-slot:item.node="{ value }">
+              <code class="font-mono text-caption">{{ value }}</code>
+            </template>
 
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="containers"
-        :search="searchQuery"
-        :sort-by="[{ key: 'names', order: 'asc' }]"
-        :row-props="getRowProps"
-        class="bg-transparent"
-        density="comfortable"
-        @click:row="goToDetail"
-        items-per-page="25"
-      >
-        <template v-slot:item.names="{ item }">
-          <div class="d-flex flex-column">
-            <span
-              class="text-body-2 font-weight-bold truncate-text"
-              :title="formatNames(item.names)"
-            >
-              {{ formatNames(item.names) }}
-            </span>
-            <span
-              class="text-caption text-primary truncate-text me-1"
-              :title="item.image"
-            >
-              {{ formatImage(item.image) }}
-            </span>
-          </div>
-        </template>
+            <template v-slot:item.status="{ value }">
+              <span class="text-caption text-grey">{{ value }}</span>
+            </template>
 
-        <template v-slot:item.up_to_date="{ item }">
-          <div class="text-center">
-            <v-chip
-              v-if="!item.up_to_date"
-              color="warning"
-              size="x-small"
-              label
-              class="text-uppercase font-weight-bold"
-            >
-              Out of Date
-            </v-chip>
-            <v-chip
-              v-else
-              color="success"
-              variant="tonal"
-              size="x-small"
-              label
-              class="text-uppercase font-weight-bold"
-            >
-              Current
-            </v-chip>
-          </div>
-        </template>
-
-        <template v-slot:item.service="{ item }">
-          <div class="d-flex flex-column">
-            <span class="text-caption font-weight-bold">{{
-              item.service
-            }}</span>
-            <span class="text-caption text-grey">{{ item.stack }}</span>
-          </div>
-        </template>
-
-        <template v-slot:item.node="{ value }">
-          <code class="font-mono text-caption">{{ value }}</code>
-        </template>
-
-        <template v-slot:item.status="{ value }">
-          <span class="text-caption text-grey">{{ value }}</span>
-        </template>
-
-        <template v-slot:item.created_at="{ value }">
-          <RelativeTime :value="value" />
-        </template>
-
-      </v-data-table>
-    </div>
-  </div>
+            <template v-slot:item.created_at="{ value }">
+              <RelativeTime :value="value" />
+            </template>
+  </DataTablePage>
 </template>
 
 <script setup lang="ts">
+import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import Loader from "../../components/Loader.vue";
 import RelativeTime from "../../components/RelativeTime.vue";
 
-const searchQuery = ref("");
 const router = useRouter();
 
 interface Container {
