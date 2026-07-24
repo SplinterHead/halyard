@@ -119,13 +119,17 @@
       >
         <!-- Node Card Header -->
         <div class="node-header pa-4 glass-card mb-4 rounded-xl border border-light" @click="goToNodeDetail(node)">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <span class="text-caption font-weight-bold text-uppercase tracking-wider font-mono text-grey-lighten-1 d-flex align-center">
-              <v-icon size="14" class="me-1" :color="node.status === 'ready' ? 'success' : 'error'">
+          <div class="d-flex align-center justify-space-between mb-1">
+            <h3 
+              class="text-h6 font-weight-bold text-truncate font-mono text-white d-flex align-center" 
+              style="max-width: 20ch;"
+              :title="node.hostname"
+            >
+              <v-icon size="18" class="me-2" :color="node.status === 'ready' ? 'success' : 'error'">
                 {{ node.status === 'ready' ? 'mdi-checkbox-blank-circle' : 'mdi-alert-circle' }}
               </v-icon>
-              {{ node.role }}
-            </span>
+              {{ node.hostname.length > 20 ? node.hostname.substring(0, 20) + '...' : node.hostname }}
+            </h3>
             <v-chip
               size="x-small"
               :color="node.role === 'manager' ? 'primary' : 'grey-lighten-1'"
@@ -135,10 +139,6 @@
               {{ node.role === 'manager' ? 'Manager' : 'Worker' }}
             </v-chip>
           </div>
-
-          <h3 class="text-h6 font-weight-bold text-truncate font-mono mb-1 text-white" :title="node.hostname">
-            {{ node.hostname }}
-          </h3>
           <span class="text-caption text-grey-darken-1 font-mono d-block mb-3">{{ node.ip }}</span>
 
           <!-- Real-Time Metrics inside Node Header -->
