@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -20,6 +21,8 @@ import (
 type StackManager struct {
 	docker *docker.Client
 }
+
+var validStackName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 func NewStackManager(cli *docker.Client) *StackManager {
 	return &StackManager{docker: cli}
@@ -109,6 +112,10 @@ func (m *StackManager) Exists(ctx context.Context, name string) (bool, error) {
 }
 
 func (m *StackManager) DeployStack(ctx context.Context, name string, workingDir string, composePath string, registries []api.Registry) error {
+	if !validStackName.MatchString(name) {
+		return fmt.Errorf("invalid stack name: must contain only letters, numbers, hyphens, and underscores")
+	}
+
 	// Prepare Docker config if registries are provided
 	var configDir string
 	if len(registries) > 0 {
@@ -220,6 +227,9 @@ func (m *StackManager) prepareDockerConfig(registries []api.Registry) (string, e
 }
 
 func (m *StackManager) RemoveStack(ctx context.Context, name string) error {
+	if !validStackName.MatchString(name) {
+		return fmt.Errorf("invalid stack name: must contain only letters, numbers, hyphens, and underscores")
+	}
 	cmd := exec.CommandContext(ctx, "docker", "stack", "rm", name)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
