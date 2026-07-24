@@ -105,11 +105,7 @@ const routes = [
     name: "settings-git",
     component: () => import("../views/settings/SettingsGitView.vue"),
   },
-  {
-    path: "/settings/events",
-    name: "events",
-    component: () => import("../views/settings/SettingsEventsView.vue"),
-  },
+
   {
     path: "/login",
     name: "login",

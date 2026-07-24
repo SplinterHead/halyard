@@ -50,13 +50,11 @@
         <v-divider v-else class="my-3 mx-2 border-opacity-25" color="white"></v-divider>
         <v-list-item prepend-icon="mdi-git" title="Repositories" to="/git/repositories" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-sync" title="Git Syncs" to="/git/syncs" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-history" title="Sync History" to="/git/history" rounded="lg"></v-list-item>
 
         <v-list-subheader v-if="!rail" class="text-uppercase font-weight-bold text-caption text-primary mt-4 mb-1">Settings</v-list-subheader>
         <v-divider v-else class="my-3 mx-2 border-opacity-25" color="white"></v-divider>
         <v-list-item prepend-icon="mdi-cog" title="Git" to="/settings/git" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-database-lock" title="Registries" to="/swarm/registries" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-history" title="Events" to="/settings/events" rounded="lg"></v-list-item>
       </v-list>
 
       <!-- Bottom Rail Toggle for convenience -->
