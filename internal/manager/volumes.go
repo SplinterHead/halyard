@@ -53,7 +53,7 @@ func (m *VolumeAggregator) ListAllVolumes(ctx context.Context) ([]api.VolumeInfo
 		wg.Add(1)
 		go func(taskIP, nodeID string) {
 			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/volumes", taskIP))
+			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/volumes", taskIP))
 			if err != nil {
 				fmt.Printf("Error fetching volumes from %s: %v\n", taskIP, err)
 				return
@@ -89,7 +89,7 @@ func (m *VolumeAggregator) PruneAllVolumes(ctx context.Context) (map[string]inte
 		go func(taskIP, nodeID string) {
 			defer wg.Done()
 			fmt.Printf("Pruning volumes on node %s at %s\n", nodeID, taskIP)
-			resp, err := m.pruneClient.Post(fmt.Sprintf("http://%s:9090/volumes/prune", taskIP), "application/json", nil)
+			resp, err := m.pruneClient.Post(fmt.Sprintf("https://%s:9090/volumes/prune", taskIP), "application/json", nil)
 			if err != nil {
 				fmt.Printf("Failed to prune volumes on node %s: %v\n", nodeID, err)
 				return
@@ -119,7 +119,7 @@ func (m *VolumeAggregator) DeleteVolume(ctx context.Context, nodeHostname string
 	}
 
 	// Send DELETE request to local agent
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, fmt.Sprintf("http://%s:9090/volumes?name=%s", ip, volumeName), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, fmt.Sprintf("https://%s:9090/volumes?name=%s", ip, volumeName), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create agent delete request: %w", err)
 	}
@@ -143,7 +143,7 @@ func (m *VolumeAggregator) BrowseVolume(ctx context.Context, nodeHostname string
 		return nil, fmt.Errorf("halyard agent not found or not running on node %s in AgentDirectory", nodeHostname)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s:9090/volumes/browse?name=%s&path=%s", ip, volumeName, path), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://%s:9090/volumes/browse?name=%s&path=%s", ip, volumeName, path), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent browse request: %w", err)
 	}

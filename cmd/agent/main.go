@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/SplinterHead/halyard/api"
 	"github.com/SplinterHead/halyard/internal/agent"
+	"github.com/SplinterHead/halyard/internal/pkg/agentclient"
 	"github.com/SplinterHead/halyard/internal/pkg/docker"
 )
 
@@ -491,10 +493,25 @@ func main() {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
-	log.Println("Agent listening on :9090")
+	log.Println("Generating ephemeral TLS certificate...")
+	cert, err := agentclient.GenerateSelfSignedCert()
+	if err != nil {
+		log.Fatalf("Failed to generate TLS certificate: %v", err)
+	}
+
 	token := os.Getenv("HALYARD_AGENT_TOKEN")
 	handler := AuthMiddleware(token, http.DefaultServeMux)
-	log.Fatal(http.ListenAndServe(":9090", handler))
+
+	server := &http.Server{
+		Addr:    ":9090",
+		Handler: handler,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		},
+	}
+
+	log.Println("Agent listening securely on :9090")
+	log.Fatal(server.ListenAndServeTLS("", ""))
 }
 
 func AuthMiddleware(token string, next http.Handler) http.Handler {

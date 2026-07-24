@@ -51,7 +51,7 @@ func (m *NetworkAggregator) ListAllNetworks(ctx context.Context) ([]api.NetworkI
 		wg.Add(1)
 		go func(taskIP, nodeID string) {
 			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/networks", taskIP))
+			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/networks", taskIP))
 			if err != nil {
 				return
 			}
@@ -165,7 +165,7 @@ func (m *NetworkAggregator) GetNetworkDetail(ctx context.Context, id string) (ap
 		wg.Add(1)
 		go func(taskIP string) {
 			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/networks/detail?id=%s", taskIP, id))
+			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/networks/detail?id=%s", taskIP, id))
 			if err != nil {
 				resChan <- result{err: err}
 				return

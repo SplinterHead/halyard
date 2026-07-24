@@ -3,6 +3,7 @@ package manager
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -67,7 +68,7 @@ func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
 
 			if ip, ok := m.agentDir.GetAgentIP(n.ID); ok {
 				// Fetch real stats from agent
-				url := fmt.Sprintf("http://%s:9090/stats", ip)
+				url := fmt.Sprintf("https://%s:9090/stats", ip)
 				log.Printf("Fetching stats from agent at %s", url)
 				resp, err := m.client.Get(url)
 				if err != nil {
@@ -130,12 +131,15 @@ func (m *NodeManager) StreamStatsWS(parentCtx context.Context, w http.ResponseWr
 
 	for _, agent := range activeAgents {
 		go func(agentIP, id string) {
-			agentURL := fmt.Sprintf("ws://%s:9090/stats/stream", agentIP)
+			agentURL := fmt.Sprintf("wss://%s:9090/stats/stream", agentIP)
 			headers := http.Header{}
 			if token := os.Getenv("HALYARD_AGENT_TOKEN"); token != "" {
 				headers.Add("Authorization", "Bearer "+token)
 			}
-			agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, headers)
+			dialer := &websocket.Dialer{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			agentConn, _, err := dialer.Dial(agentURL, headers)
 			if err != nil {
 				log.Printf("Failed to connect to agent at %s: %v", agentIP, err)
 				return
@@ -204,7 +208,7 @@ func (m *NodeManager) GetNodeDetail(ctx context.Context, id string) (api.NodeDet
 	// Try to get real-time stats from agent if available
 	agentIP, _ := m.getAgentIPForNode(ctx, id)
 	if agentIP != "" {
-		url := fmt.Sprintf("http://%s:9090/stats", agentIP)
+		url := fmt.Sprintf("https://%s:9090/stats", agentIP)
 		resp, err := m.client.Get(url)
 		if err == nil {
 			defer resp.Body.Close()
@@ -312,7 +316,7 @@ func (m *NodeManager) PruneCluster(ctx context.Context, req api.PruneRequest) er
 		wg.Add(1)
 		go func(agentIP string) {
 			defer wg.Done()
-			url := fmt.Sprintf("http://%s:9090/prune", agentIP)
+			url := fmt.Sprintf("https://%s:9090/prune", agentIP)
 			log.Printf("Triggering prune on agent at %s with options", url)
 			resp, err := m.client.Post(url, "application/json", strings.NewReader(bodyString))
 			if err != nil {
@@ -337,7 +341,7 @@ func (m *NodeManager) GetPendingUpdates(ctx context.Context, nodeID string) ([]s
 		return nil, err
 	}
 
-	url := fmt.Sprintf("http://%s:9090/host/updates/list", agentIP)
+	url := fmt.Sprintf("https://%s:9090/host/updates/list", agentIP)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -367,7 +371,7 @@ func (m *NodeManager) StreamHostUpdate(ctx context.Context, nodeID string, w htt
 		return err
 	}
 
-	url := fmt.Sprintf("http://%s:9090/host/update", agentIP)
+	url := fmt.Sprintf("https://%s:9090/host/update", agentIP)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
 		return err
@@ -409,7 +413,7 @@ func (m *NodeManager) HostReboot(ctx context.Context, nodeID string) error {
 		return err
 	}
 
-	url := fmt.Sprintf("http://%s:9090/host/reboot", agentIP)
+	url := fmt.Sprintf("https://%s:9090/host/reboot", agentIP)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
 		return err

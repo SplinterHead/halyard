@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -53,7 +54,7 @@ func (m *ContainerAggregator) ListAllContainers(ctx context.Context) ([]api.Cont
 		wg.Add(1)
 		go func(taskIP, nodeID string) {
 			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/containers", taskIP))
+			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/containers", taskIP))
 			if err != nil {
 				return
 			}
@@ -81,7 +82,7 @@ func (m *ContainerAggregator) GetContainerDetail(ctx context.Context, id, nodeNa
 	}
 
 	// 2. Fetch from agent
-	resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/containers/detail?id=%s", agentIP, id))
+	resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/containers/detail?id=%s", agentIP, id))
 	if err != nil {
 		return api.ContainerDetail{}, err
 	}
@@ -106,7 +107,7 @@ func (m *ContainerAggregator) ProxyLogs(ctx context.Context, id, nodeName string
 		return err
 	}
 
-	resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/containers/logs?id=%s", agentIP, id))
+	resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/containers/logs?id=%s", agentIP, id))
 	if err != nil {
 		return err
 	}
@@ -169,12 +170,15 @@ func (m *ContainerAggregator) StreamLogsWS(ctx context.Context, id, nodeName str
 	defer clientConn.Close()
 
 	// 2. Connect to agent WS
-	agentURL := fmt.Sprintf("ws://%s:9090/containers/logs?id=%s", agentIP, id)
+	agentURL := fmt.Sprintf("wss://%s:9090/containers/logs?id=%s", agentIP, id)
 	headers := http.Header{}
 	if token := os.Getenv("HALYARD_AGENT_TOKEN"); token != "" {
 		headers.Add("Authorization", "Bearer "+token)
 	}
-	agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, headers)
+	dialer := &websocket.Dialer{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	agentConn, _, err := dialer.Dial(agentURL, headers)
 	if err != nil {
 		clientConn.WriteMessage(websocket.TextMessage, []byte("Error connecting to agent: "+err.Error()))
 		return err
@@ -227,7 +231,7 @@ func (m *ContainerAggregator) StartContainer(ctx context.Context, id, nodeName s
 	if err != nil {
 		return err
 	}
-	resp, err := m.client.Post(fmt.Sprintf("http://%s:9090/containers/start?id=%s", agentIP, id), "application/json", nil)
+	resp, err := m.client.Post(fmt.Sprintf("https://%s:9090/containers/start?id=%s", agentIP, id), "application/json", nil)
 	if err != nil {
 		return err
 	}
@@ -240,7 +244,7 @@ func (m *ContainerAggregator) StopContainer(ctx context.Context, id, nodeName st
 	if err != nil {
 		return err
 	}
-	resp, err := m.client.Post(fmt.Sprintf("http://%s:9090/containers/stop?id=%s", agentIP, id), "application/json", nil)
+	resp, err := m.client.Post(fmt.Sprintf("https://%s:9090/containers/stop?id=%s", agentIP, id), "application/json", nil)
 	if err != nil {
 		return err
 	}
@@ -253,7 +257,7 @@ func (m *ContainerAggregator) RestartContainer(ctx context.Context, id, nodeName
 	if err != nil {
 		return err
 	}
-	resp, err := m.client.Post(fmt.Sprintf("http://%s:9090/containers/restart?id=%s", agentIP, id), "application/json", nil)
+	resp, err := m.client.Post(fmt.Sprintf("https://%s:9090/containers/restart?id=%s", agentIP, id), "application/json", nil)
 	if err != nil {
 		return err
 	}
@@ -266,7 +270,7 @@ func (m *ContainerAggregator) DeleteContainer(ctx context.Context, id, nodeName 
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, fmt.Sprintf("http://%s:9090/containers/remove?id=%s&force=%t", agentIP, id, force), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, fmt.Sprintf("https://%s:9090/containers/remove?id=%s&force=%t", agentIP, id, force), nil)
 	if err != nil {
 		return err
 	}
@@ -293,12 +297,15 @@ func (m *ContainerAggregator) ProxyExecWS(ctx context.Context, id, nodeName, she
 	}
 	defer clientConn.Close()
 
-	agentURL := fmt.Sprintf("ws://%s:9090/containers/exec?id=%s&shell=%s", agentIP, id, shell)
+	agentURL := fmt.Sprintf("wss://%s:9090/containers/exec?id=%s&shell=%s", agentIP, id, shell)
 	headers := http.Header{}
 	if token := os.Getenv("HALYARD_AGENT_TOKEN"); token != "" {
 		headers.Add("Authorization", "Bearer "+token)
 	}
-	agentConn, _, err := websocket.DefaultDialer.Dial(agentURL, headers)
+	dialer := &websocket.Dialer{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	agentConn, _, err := dialer.Dial(agentURL, headers)
 	if err != nil {
 		clientConn.WriteMessage(websocket.TextMessage, []byte("\r\nError connecting to agent: "+err.Error()+"\r\n"))
 		return err

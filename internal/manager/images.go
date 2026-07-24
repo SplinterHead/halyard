@@ -51,7 +51,7 @@ func (m *ImageAggregator) ListAllImages(ctx context.Context) ([]api.ImageInfo, e
 		wg.Add(1)
 		go func(taskIP, nodeID string) {
 			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("http://%s:9090/images", taskIP))
+			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/images", taskIP))
 			if err != nil {
 				fmt.Printf("Error fetching images from %s: %v\n", taskIP, err)
 				return
@@ -81,7 +81,7 @@ func (m *ImageAggregator) DeleteImage(ctx context.Context, nodeID string, imageI
 		return fmt.Errorf("agent not found or not running on node %s", nodeID)
 	}
 
-	url := fmt.Sprintf("http://%s:9090/images?id=%s&force=%t", ip, imageID, force)
+	url := fmt.Sprintf("https://%s:9090/images?id=%s&force=%t", ip, imageID, force)
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (m *ImageAggregator) CheckImage(ctx context.Context, nodeID string, reposit
 	}
 
 	checkURL := fmt.Sprintf(
-		"http://%s:9090/images/check?repository=%s&tag=%s&id=%s",
+		"https://%s:9090/images/check?repository=%s&tag=%s&id=%s",
 		ip,
 		url.QueryEscape(repository),
 		url.QueryEscape(tag),
