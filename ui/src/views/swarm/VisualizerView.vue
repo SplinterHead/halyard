@@ -119,7 +119,7 @@
       >
         <!-- Node Card Header -->
         <div class="node-header pa-4 glass-card mb-4 rounded-xl border border-light" @click="goToNodeDetail(node)">
-          <div class="d-flex align-center justify-space-between mb-1">
+          <div class="d-flex align-center justify-space-between mb-0">
             <h3 
               class="text-h6 font-weight-bold text-truncate font-mono text-white d-flex align-center" 
               style="max-width: 20ch;"
@@ -139,7 +139,7 @@
               {{ node.role === 'manager' ? 'Manager' : 'Worker' }}
             </v-chip>
           </div>
-          <span class="text-caption text-grey-darken-1 font-mono d-block mb-3">{{ node.ip }}</span>
+          <span class="text-caption text-grey-darken-1 font-mono d-block mb-2" style="font-size: 10px !important;">{{ node.ip }}</span>
 
           <!-- Real-Time Metrics inside Node Header -->
           <div class="d-flex flex-column gap-2 mt-2">
