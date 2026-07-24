@@ -347,7 +347,7 @@ func (m *NodeManager) GetPendingUpdates(ctx context.Context, nodeID string) ([]s
 		return nil, err
 	}
 
-	client := &http.Client{Timeout: 2 * time.Minute}
+	client := agentclient.NewPruneClient(os.Getenv("HALYARD_AGENT_TOKEN"))
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -378,7 +378,7 @@ func (m *NodeManager) StreamHostUpdate(ctx context.Context, nodeID string, w htt
 	}
 
 	// Important: We need a client without a timeout for streaming
-	client := &http.Client{}
+	client := agentclient.NewStreamingClient(os.Getenv("HALYARD_AGENT_TOKEN"))
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

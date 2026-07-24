@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sync"
 
 	"github.com/docker/docker/api/types"
 	"github.com/SplinterHead/halyard/api"
@@ -43,35 +42,11 @@ func (m *ImageAggregator) ListAllImages(ctx context.Context) ([]api.ImageInfo, e
 
 	activeAgents := m.agentDir.GetAllAgents()
 
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	allImages := make([]api.ImageInfo, 0)
-
-	for _, agent := range activeAgents {
-		wg.Add(1)
-		go func(taskIP, nodeID string) {
-			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/images", taskIP))
-			if err != nil {
-				fmt.Printf("Error fetching images from %s: %v\n", taskIP, err)
-				return
-			}
-			defer resp.Body.Close()
-
-			var imgs []api.ImageInfo
-			if err := json.NewDecoder(resp.Body).Decode(&imgs); err == nil {
-				mu.Lock()
-				for i := range imgs {
-					imgs[i].Node = nodeMap[nodeID]
-					imgs[i].NodeID = nodeID
-					allImages = append(allImages, imgs[i])
-				}
-				mu.Unlock()
-			}
-		}(agent.IP, agent.NodeID)
+	mutator := func(item *api.ImageInfo, nodeID string) {
+		item.Node = nodeMap[nodeID]
+		item.NodeID = nodeID
 	}
-
-	wg.Wait()
+	allImages := GatherFromAgents[api.ImageInfo](m.client, "/images", activeAgents, mutator)
 	return allImages, nil
 }
 

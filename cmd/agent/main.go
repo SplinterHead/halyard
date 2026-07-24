@@ -450,18 +450,41 @@ func main() {
 		fmt.Fprintf(w, "data: Update started...\n\n")
 		flusher.Flush()
 
-		scanner := bufio.NewScanner(stream)
-		for scanner.Scan() {
-			fmt.Fprintf(w, "data: %s\n\n", scanner.Text())
-			flusher.Flush()
-		}
+		lineChan := make(chan string)
+		errChan := make(chan error, 1)
 
-		if err := scanner.Err(); err != nil {
-			fmt.Fprintf(w, "data: ERROR: %v\n\n", err)
-		} else {
-			fmt.Fprintf(w, "data: DONE\n\n")
+		go func() {
+			scanner := bufio.NewScanner(stream)
+			for scanner.Scan() {
+				lineChan <- scanner.Text()
+			}
+			errChan <- scanner.Err()
+		}()
+
+		keepAlive := time.NewTicker(15 * time.Second)
+		defer keepAlive.Stop()
+
+		for {
+			select {
+			case line := <-lineChan:
+				fmt.Fprintf(w, "data: %s\n\n", line)
+				flusher.Flush()
+			case err := <-errChan:
+				if err != nil {
+					fmt.Fprintf(w, "data: ERROR: %v\n\n", err)
+				} else {
+					fmt.Fprintf(w, "data: DONE\n\n")
+				}
+				flusher.Flush()
+				return // End of stream
+			case <-keepAlive.C:
+				// Send an SSE comment to bypass proxy idle timeouts (e.g. Traefik/AWS)
+				fmt.Fprintf(w, ": keepalive\n\n")
+				flusher.Flush()
+			case <-ctx.Done():
+				return
+			}
 		}
-		flusher.Flush()
 	})
 
 	http.HandleFunc("/host/updates/list", func(w http.ResponseWriter, r *http.Request) {

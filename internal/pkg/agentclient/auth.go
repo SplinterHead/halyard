@@ -51,3 +51,17 @@ func NewPruneClient(token string) *http.Client {
 		},
 	}
 }
+
+// NewStreamingClient returns an *http.Client configured for streaming operations
+// with no timeout.
+func NewStreamingClient(token string) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+	return &http.Client{
+		Transport: &tokenAuthRoundTripper{
+			token: token,
+			rt:    transport,
+		},
+	}
+}

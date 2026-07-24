@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sync"
 
 	"github.com/gorilla/websocket"
 	"github.com/docker/docker/api/types"
@@ -46,33 +45,10 @@ func (m *ContainerAggregator) ListAllContainers(ctx context.Context) ([]api.Cont
 	// Get active agents from directory
 	activeAgents := m.agentDir.GetAllAgents()
 
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	allContainers := make([]api.ContainerInfo, 0)
-
-	for _, agent := range activeAgents {
-		wg.Add(1)
-		go func(taskIP, nodeID string) {
-			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/containers", taskIP))
-			if err != nil {
-				return
-			}
-			defer resp.Body.Close()
-
-			var conts []api.ContainerInfo
-			if err := json.NewDecoder(resp.Body).Decode(&conts); err == nil {
-				mu.Lock()
-				for i := range conts {
-					conts[i].Node = nodeMap[nodeID]
-					allContainers = append(allContainers, conts[i])
-				}
-				mu.Unlock()
-			}
-		}(agent.IP, agent.NodeID)
+	mutator := func(item *api.ContainerInfo, nodeID string) {
+		item.Node = nodeMap[nodeID]
 	}
-
-	wg.Wait()
+	allContainers := GatherFromAgents[api.ContainerInfo](m.client, "/containers", activeAgents, mutator)
 	return allContainers, nil
 }
 func (m *ContainerAggregator) GetContainerDetail(ctx context.Context, id, nodeName string) (api.ContainerDetail, error) {

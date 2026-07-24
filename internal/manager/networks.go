@@ -43,59 +43,33 @@ func (m *NetworkAggregator) ListAllNetworks(ctx context.Context) ([]api.NetworkI
 
 	activeAgents := m.agentDir.GetAllAgents()
 
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+	mutator := func(item *api.NetworkInfo, nodeID string) {
+		item.Node = nodeMap[nodeID] // store raw node name for map logic
+	}
+	allNets := GatherFromAgents[api.NetworkInfo](m.client, "/networks", activeAgents, mutator)
+
 	networkMap := make(map[string]api.NetworkInfo)
-
-	for _, agent := range activeAgents {
-		wg.Add(1)
-		go func(taskIP, nodeID string) {
-			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/networks", taskIP))
-			if err != nil {
-				return
+	for _, n := range allNets {
+		key := n.Name
+		existing, exists := networkMap[key]
+		if !exists {
+			if n.Scope == "swarm" {
+				n.Node = "Swarm"
 			}
-			defer resp.Body.Close()
-
-			var nets []api.NetworkInfo
-			if err := json.NewDecoder(resp.Body).Decode(&nets); err == nil {
-				mu.Lock()
-				for _, n := range nets {
-					nodeName := nodeMap[nodeID]
-					key := n.Name
-
-					existing, exists := networkMap[key]
-					if !exists {
-						// First time seeing this network name
-						if n.Scope == "swarm" {
-							n.Node = "Swarm"
-						} else {
-							n.Node = nodeName
-						}
-						networkMap[key] = n
-					} else {
-						// Already seen this network name
-						if n.Scope == "swarm" && existing.Scope != "swarm" {
-							// Upgrade to Swarm scope if found
-							n.Node = "Swarm"
-							networkMap[key] = n
-						} else if n.Scope != "swarm" && existing.Scope != "swarm" {
-							// Both local, mark as Multi-Node if from different nodes
-							if existing.Node != nodeName && existing.Node != "Multi-Node" {
-								existing.Node = "Multi-Node"
-								networkMap[key] = existing
-							}
-						}
-					}
+			networkMap[key] = n
+		} else {
+			if n.Scope == "swarm" && existing.Scope != "swarm" {
+				n.Node = "Swarm"
+				networkMap[key] = n
+			} else if n.Scope != "swarm" && existing.Scope != "swarm" {
+				if existing.Node != n.Node && existing.Node != "Multi-Node" {
+					existing.Node = "Multi-Node"
+					networkMap[key] = existing
 				}
-				mu.Unlock()
 			}
-		}(agent.IP, agent.NodeID)
+		}
 	}
 
-	wg.Wait()
-
-	// Convert map to slice
 	allNetworks := make([]api.NetworkInfo, 0, len(networkMap))
 	for _, n := range networkMap {
 		allNetworks = append(allNetworks, n)

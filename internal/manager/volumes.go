@@ -45,34 +45,10 @@ func (m *VolumeAggregator) ListAllVolumes(ctx context.Context) ([]api.VolumeInfo
 	// Get active agents from directory
 	activeAgents := m.agentDir.GetAllAgents()
 
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	allVolumes := make([]api.VolumeInfo, 0)
-
-	for _, agent := range activeAgents {
-		wg.Add(1)
-		go func(taskIP, nodeID string) {
-			defer wg.Done()
-			resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/volumes", taskIP))
-			if err != nil {
-				fmt.Printf("Error fetching volumes from %s: %v\n", taskIP, err)
-				return
-			}
-			defer resp.Body.Close()
-
-			var vols []api.VolumeInfo
-			if err := json.NewDecoder(resp.Body).Decode(&vols); err == nil {
-				mu.Lock()
-				for i := range vols {
-					vols[i].Node = nodeMap[nodeID]
-					allVolumes = append(allVolumes, vols[i])
-				}
-				mu.Unlock()
-			}
-		}(agent.IP, agent.NodeID)
+	mutator := func(item *api.VolumeInfo, nodeID string) {
+		item.Node = nodeMap[nodeID]
 	}
-
-	wg.Wait()
+	allVolumes := GatherFromAgents[api.VolumeInfo](m.client, "/volumes", activeAgents, mutator)
 	return allVolumes, nil
 }
 
