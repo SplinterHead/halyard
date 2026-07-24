@@ -33,14 +33,15 @@
         <v-list-subheader v-if="!rail" class="text-uppercase font-weight-bold text-caption text-primary mb-1">Swarm</v-list-subheader>
         <v-divider v-else class="my-3 mx-2 border-opacity-25" color="white"></v-divider>
         
-        <v-list-item prepend-icon="mdi-layers-outline" title="Stacks" to="/swarm/stacks" value="stacks" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-monitor-dashboard" title="Nodes" to="/swarm/nodes" value="nodes" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-sitemap-outline" title="Visualizer" to="/swarm/visualizer" value="visualizer" rounded="lg"></v-list-item>
-
+        <v-list-item prepend-icon="mdi-monitor-dashboard" title="Nodes" to="/swarm/nodes" value="nodes" rounded="lg"></v-list-item>
+        <v-list-item prepend-icon="mdi-layers-outline" title="Stacks" to="/swarm/stacks" value="stacks" rounded="lg"></v-list-item>
+        
         <v-list-item prepend-icon="mdi-server-network" title="Services" to="/swarm/services" value="services" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-database-outline" title="Volumes" to="/swarm/volumes" value="volumes" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-docker" title="Containers" to="/swarm/containers" value="containers" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-layers-triple-outline" title="Images" to="/swarm/images" value="images" rounded="lg"></v-list-item>
+        
+        <v-list-item prepend-icon="mdi-database-outline" title="Volumes" to="/swarm/volumes" value="volumes" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-lan" title="Networks" to="/swarm/networks" value="networks" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-code-braces" title="Configs" to="/swarm/variables" value="variables" rounded="lg"></v-list-item>
         <v-list-item prepend-icon="mdi-lock-outline" title="Secrets" to="/swarm/secrets" value="secrets" rounded="lg"></v-list-item>
