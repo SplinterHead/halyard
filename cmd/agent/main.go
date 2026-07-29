@@ -473,6 +473,7 @@ func main() {
 				if err != nil {
 					fmt.Fprintf(w, "data: ERROR: %v\n\n", err)
 				} else {
+					statsColl.CheckHostUpdates()
 					fmt.Fprintf(w, "data: DONE\n\n")
 				}
 				flusher.Flush()

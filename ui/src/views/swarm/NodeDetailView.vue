@@ -260,6 +260,7 @@
           <v-spacer></v-spacer>
           <v-btn variant="text" color="grey" @click="closeUpdateDialog" :disabled="updateDialog.updating">Cancel</v-btn>
           <v-btn
+            v-if="!updateDialog.completed"
             variant="flat"
             color="info"
             :loading="updateDialog.updating"
@@ -267,6 +268,14 @@
             @click="confirmUpdate"
           >
             Confirm Update
+          </v-btn>
+          <v-btn
+            v-else
+            variant="flat"
+            color="success"
+            @click="closeUpdateDialog"
+          >
+            Done
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -451,6 +460,7 @@ const updateDialog = ref({
   show: false,
   loading: false,
   updating: false,
+  completed: false,
   packages: [] as PackageUpdate[],
   error: '',
   eventSource: null as EventSource | null
@@ -462,6 +472,7 @@ const openUpdateDialog = async () => {
   updateDialog.value.loading = true
   updateDialog.value.error = ''
   updateDialog.value.updating = false
+  updateDialog.value.completed = false
   updateDialog.value.packages = []
   
   try {
@@ -497,6 +508,8 @@ const confirmUpdate = () => {
       eventSource.close()
       updateDialog.value.eventSource = null
       updateDialog.value.updating = false
+      updateDialog.value.completed = true
+      fetchNodeDetail()
       return
     }
     

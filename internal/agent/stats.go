@@ -30,15 +30,15 @@ func NewStatsCollector(cli *docker.Client) *StatsCollector {
 func (s *StatsCollector) pollHostUpdates() {
 	// Give the Docker daemon a moment to fully register this container's state
 	time.Sleep(15 * time.Second)
-	s.checkHostUpdates()
+	s.CheckHostUpdates()
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
-		s.checkHostUpdates()
+		s.CheckHostUpdates()
 	}
 }
 
-func (s *StatsCollector) checkHostUpdates() {
+func (s *StatsCollector) CheckHostUpdates() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
