@@ -15,7 +15,6 @@ Keep your infrastructure in perfect sync with your codebase without manual inter
 * **Continuous Git Reconciliation**: Point Halyard to a Git repository (GitHub, GitLab, or self-hosted), specify a branch, and let Halyard automatically pull and sync your `compose.yml` definitions to the cluster.
 * **Smart Configurations & `.env` Support**: Full capability to pull down complete repositories, ensuring your local assets, environment files, and configurations are ready when deploying complex stacks.
 * **One-Click Manual Syncs**: Instantly force an immediate stack reconciliation to deploy hotfixes or latest commits.
-* **Deployment Audit Trail**: Access a chronological history of all deployment events, commit SHAs, and sync details in a clean unified feed.
 
 ### 📊 Single Pane-of-Glass Observability
 Gain complete visual clarity over what is running inside your cluster.
@@ -29,6 +28,7 @@ Reclaim wasted server disk space safely and efficiently.
 * **Node-Local Volume Deletion**: Easily remove unused volumes directly from the interface. Halyard handles the background routing to locate the correct node and delete it safely.
 * **Service Lifecycle Controls**: Scale, configure, or terminate Swarm services directly from the UI with clear confirmation safety prompts.
 * **Cluster-Wide Pruning**: Trigger concurrent cleanups of unused resources (stopped containers, networks, volumes, and dangling images) across all worker nodes simultaneously.
+* **Node OS Updates**: Trigger OS-level package updates (`apt-get update && upgrade`) on your worker nodes directly from the UI with real-time feedback.
 
 ### 🔒 Registry Protection & Rate Limit Meters
 Never get rate-limited by registry pull limits again.
@@ -71,6 +71,7 @@ Open your browser and navigate to `http://<your-manager-ip>:8080` to start manag
 - [x] **Cluster-Wide Cleanups**: Advanced, granular pruning controls.
 - [x] **Registry Limit Gauges**: Live Docker Hub quota metrics.
 - [x] **Secret & Config Management**: View and modify secrets and configurations visually.
+- [x] **Node OS Updates**: Trigger and monitor OS updates across the cluster.
 - [ ] **Webhook Integrations**: Sync instantly when code is pushed.
 - [ ] **OIDC / LDAP Authentication**: Secure access control.
 - [ ] **Self-Managing Stacks**: Allow Halyard to self-update via its own GitOps pipeline.
