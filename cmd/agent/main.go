@@ -439,7 +439,7 @@ func main() {
 			return
 		}
 
-		stream, err := cli.StreamHostCommand(ctx, "DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y")
+		stream, err := cli.StreamHostCommand(ctx, "DEBIAN_FRONTEND=noninteractive dpkg --configure -a && DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y")
 		if err != nil {
 			fmt.Fprintf(w, "data: ERROR: %v\n\n", err)
 			flusher.Flush()

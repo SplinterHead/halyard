@@ -16,7 +16,7 @@ services:
           - node.role == manager
       labels:
         - traefik.enable=true
-        - traefik.http.routers.halyard.rule=Host(`splinter.tools`)
+        - traefik.http.routers.halyard.rule=Host(`halyard.example.com`)
         - traefik.http.services.halyard.loadbalancer.server.port=8080
 
   agent:
