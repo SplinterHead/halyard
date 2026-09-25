@@ -57,18 +57,14 @@
       </v-list>
 
       <!-- Bottom Rail Toggle for convenience -->
-      <template v-slot:append v-if="!rail">
-        <div class="pa-2">
-          <v-btn
-            block
-            variant="text"
-            prepend-icon="mdi-chevron-left"
-            @click.stop="rail = true"
-            size="small"
-            color="grey"
-          >
-            Collapse
-          </v-btn>
+      <template v-slot:append>
+        <div class="pa-4 text-center">
+          <span v-if="!rail" class="text-caption text-grey font-mono font-weight-bold">
+            v{{ pkg.version }}
+          </span>
+          <span v-else class="text-caption text-grey font-mono font-weight-bold" style="font-size: 0.65rem !important">
+            {{ pkg.version }}
+          </span>
         </div>
       </template>
     </v-navigation-drawer>
@@ -115,6 +111,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import pkg from '../package.json'
 
 const route = useRoute()
 const router = useRouter()
