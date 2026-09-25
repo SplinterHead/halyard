@@ -67,7 +67,7 @@
     </v-navigation-drawer>
 
     <v-app-bar v-if="!isAuthPage" flat class="glass-panel border-b-0" elevation="0">
-      <v-app-bar-nav-icon @click.stop="rail = !rail" color="white"></v-app-bar-nav-icon>
+      <v-app-bar-nav-icon :icon="rail ? 'mdi-menu-close' : 'mdi-menu-open'" @click.stop="rail = !rail" color="white"></v-app-bar-nav-icon>
       <v-spacer></v-spacer>
       
       <!-- Premium App Bar Actions -->
