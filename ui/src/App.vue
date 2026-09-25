@@ -8,7 +8,6 @@
       app
       class="glass-panel border-e-0"
       elevation="0"
-      @click="rail = false"
     >
       <v-list-item
         class="py-4 mt-2"
