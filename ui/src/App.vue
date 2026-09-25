@@ -58,12 +58,9 @@
 
       <!-- Bottom Rail Toggle for convenience -->
       <template v-slot:append>
-        <div class="pa-4 text-center">
-          <span v-if="!rail" class="text-caption text-grey font-mono font-weight-bold">
+        <div v-if="!rail" class="pa-4 text-center">
+          <span class="text-caption text-grey font-mono font-weight-bold">
             v{{ pkg.version }}
-          </span>
-          <span v-else class="text-caption text-grey font-mono font-weight-bold" style="font-size: 0.65rem !important">
-            {{ pkg.version }}
           </span>
         </div>
       </template>
