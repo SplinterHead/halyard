@@ -482,7 +482,8 @@ func main() {
 	http.HandleFunc("/api/stacks/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			name := strings.TrimPrefix(r.URL.Path, "/api/stacks/")
-			err := stackMgr.RemoveStack(r.Context(), name)
+			deleteVolumes := r.URL.Query().Get("deleteVolumes") == "true"
+			err := stackMgr.RemoveStack(r.Context(), name, deleteVolumes)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

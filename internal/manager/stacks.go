@@ -226,15 +226,52 @@ func (m *StackManager) prepareDockerConfig(registries []api.Registry) (string, e
 	return configDir, nil
 }
 
-func (m *StackManager) RemoveStack(ctx context.Context, name string) error {
+func (m *StackManager) RemoveStack(ctx context.Context, name string, deleteVolumes bool) error {
 	if !validStackName.MatchString(name) {
 		return fmt.Errorf("invalid stack name: must contain only letters, numbers, hyphens, and underscores")
 	}
+
+	var volsToRemove []string
+	if deleteVolumes {
+		// Get volumes associated with this stack
+		cmd := exec.CommandContext(ctx, "docker", "volume", "ls", "-q", "-f", "label=com.docker.stack.namespace="+name)
+		output, err := cmd.CombinedOutput()
+		if err == nil && len(output) > 0 {
+			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+			for _, line := range lines {
+				if line != "" {
+					volsToRemove = append(volsToRemove, line)
+				}
+			}
+		}
+	}
+
 	cmd := exec.CommandContext(ctx, "docker", "stack", "rm", name)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("remove failed: %v, output: %s", err, string(output))
 	}
+
+	if deleteVolumes && len(volsToRemove) > 0 {
+		// Retry deleting volumes for up to ~30 seconds, 
+		// as containers take time to stop and release the volumes.
+		pendingVols := volsToRemove
+		for i := 0; i < 15; i++ {
+			if len(pendingVols) == 0 {
+				break
+			}
+			time.Sleep(2 * time.Second)
+			var stillPending []string
+			for _, vol := range pendingVols {
+				rmCmd := exec.CommandContext(ctx, "docker", "volume", "rm", vol)
+				if err := rmCmd.Run(); err != nil {
+					stillPending = append(stillPending, vol)
+				}
+			}
+			pendingVols = stillPending
+		}
+	}
+
 	return nil
 }
 

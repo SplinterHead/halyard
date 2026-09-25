@@ -231,6 +231,14 @@
           Are you sure you want to remove the stack
           <strong>{{ stack?.name }}</strong
           >? This will stop and remove all associated services.
+          
+          <v-checkbox
+            v-model="deleteVolumes"
+            label="Delete associated volumes"
+            color="error"
+            hide-details
+            class="mt-4"
+          ></v-checkbox>
         </v-card-text>
         <v-card-actions class="pa-6 pt-0">
           <v-spacer></v-spacer>
@@ -262,6 +270,7 @@ const stack = ref<any>(null);
 const loading = ref(false);
 const actionLoading = ref(false);
 const deleteDialog = ref(false);
+const deleteVolumes = ref(false);
 
 const taskHeaders = [
   { title: "Service", key: "service_name", align: "start" as const },
@@ -335,6 +344,7 @@ const performAction = async (action: string) => {
 };
 
 const confirmDelete = () => {
+  deleteVolumes.value = false;
   deleteDialog.value = true;
 };
 
@@ -342,7 +352,7 @@ const deleteStack = async () => {
   if (!stack.value) return;
   actionLoading.value = true;
   try {
-    const response = await fetch(`/api/stacks/${stack.value.name}`, {
+    const response = await fetch(`/api/stacks/${stack.value.name}?deleteVolumes=${deleteVolumes.value}`, {
       method: "DELETE",
     });
     if (response.ok) {
