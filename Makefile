@@ -1,6 +1,7 @@
 .PHONY: build-manager build-agent build-all push-multi clean
 
 PLATFORMS=linux/amd64,linux/arm64
+VERSION=$(shell grep -m 1 '"version"' ui/package.json | awk -F '"' '{print $$4}')
 
 build-manager:
 	docker build -t halyard-manager:latest -f deploy/manager.Dockerfile .
@@ -9,10 +10,10 @@ build-agent:
 	docker build -t halyard-agent:latest -f deploy/agent.Dockerfile .
 
 push-manager-multi:
-	docker buildx build --push --platform $(PLATFORMS) -t splinterhead27/halyard-manager:latest -f deploy/manager.Dockerfile .
+	docker buildx build --push --platform $(PLATFORMS) -t splinterhead27/halyard-manager:latest -t splinterhead27/halyard-manager:v$(VERSION) -f deploy/manager.Dockerfile .
 
 push-agent-multi:
-	docker buildx build --push --platform $(PLATFORMS) -t splinterhead27/halyard-agent:latest -f deploy/agent.Dockerfile .
+	docker buildx build --push --platform $(PLATFORMS) -t splinterhead27/halyard-agent:latest -t splinterhead27/halyard-agent:v$(VERSION) -f deploy/agent.Dockerfile .
 
 build-all: build-manager build-agent
 push-multi: push-manager-multi push-agent-multi
