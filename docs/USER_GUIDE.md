@@ -188,9 +188,7 @@ Halyard includes an automated background image poller that scans remote image re
 
 ### ⚙️ Operator Actions
 * **Configure Polling Timer**: Set the update check interval anywhere from 1 to 72 hours (or set to `0` to disable automatic background checks).
-* **Toggle Update Stacks**: Enable the **Update stacks** checkbox to automatically restart services when newer images are detected.
-  * **Replicated Services**: Restarts tasks progressively by scaling down by 1 replica and back up (`scale -1 then +1`) with zero downtime.
-  * **Global Services**: Kills containers node by node with progressive delays, prompting Docker Swarm to respawn fresh containers using the newly pulled image.
+* **Toggle Update Stacks**: Enable the **Update stacks** checkbox to automatically restart services when newer images are detected. Triggers native Docker Swarm rolling updates (`ServiceUpdate`) with automatic stale digest unpinning and zero downtime across both replicated and global services.
 * **Check for Updates Now**: Instantly trigger an on-demand cluster-wide image poll with real-time feedback.
 
 ### 📝 Logging Behavior

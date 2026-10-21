@@ -13,7 +13,6 @@ import (
 	"github.com/SplinterHead/halyard/api"
 	"github.com/SplinterHead/halyard/internal/pkg/docker"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
 )
 
 type ImagePoller struct {
@@ -348,7 +347,7 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 
 		// If UpdateStacks is enabled, restart matching services
 		if settings.UpdateStacks {
-			restartedForImage := p.restartMatchingServices(ctx, entry.Repository, entry.Tag, services, nodeHostnameMap)
+			restartedForImage := p.restartMatchingServices(ctx, entry.Repository, entry.Tag, services, auth)
 			if len(restartedForImage) > 0 {
 				result.RestartedServices = append(result.RestartedServices, restartedForImage...)
 				detailEntry += fmt.Sprintf(" | Restarted: %s", strings.Join(restartedForImage, ", "))
@@ -370,152 +369,87 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 	return &result, nil
 }
 
-// restartMatchingServices handles restarting both replicated and global services
+// restartMatchingServices handles triggering Docker Swarm's rolling update for all matching services
 func (p *ImagePoller) restartMatchingServices(
 	ctx context.Context,
 	repo string,
 	tag string,
 	services []api.Service,
-	nodeHostnameMap map[string]string,
+	auth string,
 ) []string {
 	restarted := make([]string, 0)
-	targetImage := repo + ":" + tag
 
 	for _, svc := range services {
 		if !imageMatches(svc.Image, repo, tag) {
 			continue
 		}
 
-		log.Printf("ImagePoller: Service %s (mode: %s) uses updated image %s:%s, triggering restart...",
+		log.Printf("ImagePoller: Service %s (mode: %s) uses updated image %s:%s, triggering rolling restart...",
 			svc.Name, svc.Mode, repo, tag)
 
-		// If the service's image is pinned to an old digest (@sha256:...), update it to the clean repo:tag
-		// so Docker Swarm resolves and runs the updated image!
-		if strings.Contains(svc.Image, "@sha256:") {
-			p.updateServiceImage(ctx, svc.ID, targetImage)
+		if err := p.restartServiceWithImage(ctx, svc, repo, tag, auth); err != nil {
+			log.Printf("ImagePoller: Failed rolling update for service %s: %v", svc.Name, err)
+			continue
 		}
 
-		if svc.Mode == "global" {
-			// Global services: kill the service node by node
-			p.restartGlobalServiceNodeByNode(ctx, svc, nodeHostnameMap)
-			restarted = append(restarted, fmt.Sprintf("%s (global)", svc.Name))
-		} else {
-			// Replicated services: scale -1 then +1
-			p.restartReplicatedService(ctx, svc)
-			restarted = append(restarted, fmt.Sprintf("%s (replicated)", svc.Name))
-		}
+		restarted = append(restarted, fmt.Sprintf("%s (%s)", svc.Name, svc.Mode))
 	}
 
 	return restarted
 }
 
-func (p *ImagePoller) updateServiceImage(ctx context.Context, serviceID, newImage string) {
-	service, _, err := p.docker.ServiceInspectWithRaw(ctx, serviceID, types.ServiceInspectOptions{})
+// restartServiceWithImage performs a zero-downtime rolling update on a Swarm service (replicated or global)
+func (p *ImagePoller) restartServiceWithImage(ctx context.Context, svc api.Service, repo, tag, auth string) error {
+	service, _, err := p.docker.ServiceInspectWithRaw(ctx, svc.ID, types.ServiceInspectOptions{})
 	if err != nil {
-		log.Printf("ImagePoller: Failed to inspect service %s for image update: %v", serviceID, err)
-		return
+		return fmt.Errorf("inspect failed: %w", err)
 	}
-	service.Spec.TaskTemplate.ContainerSpec.Image = newImage
+
+	// Determine clean target image reference without any stale @sha256 digest
+	targetImage := svc.Image
+	if atIdx := strings.Index(targetImage, "@"); atIdx != -1 {
+		targetImage = targetImage[:atIdx]
+	}
+	if targetImage == "" || !strings.Contains(targetImage, tag) {
+		targetImage = repo + ":" + tag
+	}
+
+	service.Spec.TaskTemplate.ContainerSpec.Image = targetImage
 	service.Spec.TaskTemplate.ForceUpdate++
-	_, err = p.docker.ServiceUpdate(ctx, serviceID, service.Version, service.Spec, types.ServiceUpdateOptions{
+
+	// Attempt 1: QueryRegistry: true with auth so Swarm resolves the new remote digest
+	opts := types.ServiceUpdateOptions{
 		QueryRegistry: true,
-	})
-	if err != nil {
-		log.Printf("ImagePoller: Failed to update service %s image to %s: %v", serviceID, newImage, err)
 	}
-}
-
-// restartReplicatedService scales -1 then +1 for replicated services
-func (p *ImagePoller) restartReplicatedService(ctx context.Context, svc api.Service) {
-	svcDetail, err := p.svcMgr.GetServiceDetail(ctx, svc.ID)
-	if err != nil {
-		log.Printf("ImagePoller: Failed to inspect replicated service %s: %v", svc.Name, err)
-		return
+	if auth != "" {
+		opts.EncodedRegistryAuth = auth
 	}
 
-	currentReplicas := svcDetail.Replicas
-	if currentReplicas == 0 {
-		log.Printf("ImagePoller: Replicated service %s is currently at 0 replicas; skipping restart", svc.Name)
-		return
+	_, updateErr := p.docker.ServiceUpdate(ctx, svc.ID, service.Version, service.Spec, opts)
+	if updateErr == nil {
+		log.Printf("ImagePoller: Successfully restarted service %s to use updated image %s", svc.Name, targetImage)
+		return nil
 	}
 
-	if currentReplicas == 1 {
-		log.Printf("ImagePoller: Scaling service %s (1 -> 0 -> 1)...", svc.Name)
-		if err := p.svcMgr.ScaleService(ctx, svc.ID, 0); err != nil {
-			log.Printf("ImagePoller: Error scaling down service %s: %v", svc.Name, err)
-		}
-		time.Sleep(2 * time.Second)
-		if err := p.svcMgr.ScaleService(ctx, svc.ID, 1); err != nil {
-			log.Printf("ImagePoller: Error scaling up service %s: %v", svc.Name, err)
-		}
-	} else {
-		// Replicas > 1: scale -1 then +1, cycling each replica
-		log.Printf("ImagePoller: Scaling service %s (%d -> %d -> %d)...", svc.Name, currentReplicas, currentReplicas-1, currentReplicas)
-		for r := uint64(0); r < currentReplicas; r++ {
-			if err := p.svcMgr.ScaleService(ctx, svc.ID, currentReplicas-1); err != nil {
-				log.Printf("ImagePoller: Error scaling -1 on service %s: %v", svc.Name, err)
-				break
-			}
-			time.Sleep(2 * time.Second)
-			if err := p.svcMgr.ScaleService(ctx, svc.ID, currentReplicas); err != nil {
-				log.Printf("ImagePoller: Error scaling +1 on service %s: %v", svc.Name, err)
-				break
-			}
-			if r < currentReplicas-1 {
-				time.Sleep(2 * time.Second)
-			}
-		}
+	// Attempt 2: If QueryRegistry failed (e.g. registry auth missing from manager or network),
+	// retry with QueryRegistry: false. Since Halyard already pulled the updated image to the nodes,
+	// the nodes will use the freshly pulled image.
+	// Re-inspect to get fresh service.Version to prevent "update out of sequence"
+	freshSvc, _, inspectErr := p.docker.ServiceInspectWithRaw(ctx, svc.ID, types.ServiceInspectOptions{})
+	if inspectErr == nil {
+		service = freshSvc
+		service.Spec.TaskTemplate.ContainerSpec.Image = targetImage
+		service.Spec.TaskTemplate.ForceUpdate++
 	}
 
-	log.Printf("ImagePoller: Successfully restarted replicated service %s", svc.Name)
-}
-
-// restartGlobalServiceNodeByNode kills the service node by node
-func (p *ImagePoller) restartGlobalServiceNodeByNode(ctx context.Context, svc api.Service, nodeHostnameMap map[string]string) {
-	tasks, err := p.docker.TaskList(ctx, types.TaskListOptions{
-		Filters: filters.NewArgs(
-			filters.Arg("service", svc.ID),
-			filters.Arg("desired-state", "running"),
-		),
-	})
-	if err != nil {
-		log.Printf("ImagePoller: Failed to list tasks for global service %s: %v", svc.Name, err)
-		return
+	opts.QueryRegistry = false
+	_, retryErr := p.docker.ServiceUpdate(ctx, svc.ID, service.Version, service.Spec, opts)
+	if retryErr != nil {
+		return fmt.Errorf("service update failed (registry: %v, fallback: %w)", updateErr, retryErr)
 	}
 
-	log.Printf("ImagePoller: Restarting global service %s across %d tasks node by node...", svc.Name, len(tasks))
-
-	for i, task := range tasks {
-		if task.Status.State != "running" {
-			continue
-		}
-
-		containerID := task.Status.ContainerStatus.ContainerID
-		nodeName := nodeHostnameMap[task.NodeID]
-		if nodeName == "" {
-			nodeName = task.NodeID
-		}
-
-		if containerID != "" {
-			displayID := containerID
-			if len(displayID) > 12 {
-				displayID = displayID[:12]
-			}
-			log.Printf("ImagePoller: [%d/%d] Killing container %s on node %s for global service %s...",
-				i+1, len(tasks), displayID, nodeName, svc.Name)
-
-			if err := p.contAgg.DeleteContainer(ctx, containerID, nodeName, true); err != nil {
-				log.Printf("ImagePoller: Error killing container %s on node %s: %v", displayID, nodeName, err)
-			} else {
-				log.Printf("ImagePoller: Killed container %s on node %s (Swarm will recreate with updated image)", displayID, nodeName)
-			}
-
-			// Wait between nodes so the global service updates progressively
-			time.Sleep(3 * time.Second)
-		}
-	}
-
-	log.Printf("ImagePoller: Completed node-by-node restart for global service %s", svc.Name)
+	log.Printf("ImagePoller: Successfully restarted service %s using local image %s", svc.Name, targetImage)
+	return nil
 }
 
 func (p *ImagePoller) saveResult(res api.ImagePollResult) {

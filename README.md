@@ -41,9 +41,7 @@ Keep your running containers and stacks continuously up to date with upstream im
 * **Configurable Update Polling Timer**: Set how often (in hours) Halyard scans each unique image and architecture combination across all Swarm nodes.
 * **Deduplicated Multi-Arch Checks**: Inspects remote registries efficiently once per unique image+platform pair to preserve rate limits.
 * **Automated Node Image Pulling**: Automatically pulls new image revisions to all relevant Swarm nodes running that architecture.
-* **Automated Stack Restarts**: When enabled via "Update stacks", automatically rolls services:
-  * **Replicated services**: Progressively scaled down by 1 and back up (`scale -1 then +1`) with zero downtime.
-  * **Global services**: Containers killed node by node so Swarm immediately recreates them with the updated image.
+* **Automated Stack Restarts**: When enabled via "Update stacks", triggers native Docker Swarm rolling updates (`ServiceUpdate` with stale digest unpinning and registry re-resolution), updating both replicated and global services with zero downtime according to their configured update policies.
 * **Clean Logging**: High-signal logging that only outputs when a poll triggers or new images are discovered and pulled.
 
 ---
