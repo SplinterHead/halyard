@@ -36,6 +36,16 @@ Never get rate-limited by registry pull limits again.
 * **Credential-Aware Fetching**: Displays authenticated quota limits if credentials are set, with seamless anonymous limit fallback tracking for public IPs.
 * **Authentication Banner Alerts**: Highlights public registry setups with one-click actions to authenticate and secure your pull quotas.
 
+### 📦 Container Image Update Polling & Automated Restarts
+Keep your running containers and stacks continuously up to date with upstream image releases.
+* **Configurable Update Polling Timer**: Set how often (in hours) Halyard scans each unique image and architecture combination across all Swarm nodes.
+* **Deduplicated Multi-Arch Checks**: Inspects remote registries efficiently once per unique image+platform pair to preserve rate limits.
+* **Automated Node Image Pulling**: Automatically pulls new image revisions to all relevant Swarm nodes running that architecture.
+* **Automated Stack Restarts**: When enabled via "Update stacks", automatically rolls services:
+  * **Replicated services**: Progressively scaled down by 1 and back up (`scale -1 then +1`) with zero downtime.
+  * **Global services**: Containers killed node by node so Swarm immediately recreates them with the updated image.
+* **Clean Logging**: High-signal logging that only outputs when a poll triggers or new images are discovered and pulled.
+
 ---
 
 ## ⚡ Quick Start
@@ -70,6 +80,7 @@ Open your browser and navigate to `http://<your-manager-ip>:8080` to start manag
 - [x] **Live Container Logs**: High-performance streaming of logs to the UI.
 - [x] **Cluster-Wide Cleanups**: Advanced, granular pruning controls.
 - [x] **Registry Limit Gauges**: Live Docker Hub quota metrics.
+- [x] **Container Image Update Polling**: Automated checks, node pulls, and stack rolling restarts.
 - [x] **Secret & Config Management**: View and modify secrets and configurations visually.
 - [x] **Node OS Updates**: Trigger and monitor OS updates across the cluster.
 - [ ] **Webhook Integrations**: Sync instantly when code is pushed.

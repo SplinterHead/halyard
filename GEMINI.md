@@ -81,3 +81,4 @@ Stacks are deployed via `deploy/docker-stack.yml`, which mounts the Docker socke
 - **Agent Handlers**: New node-local features must be implemented in `internal/agent` and exposed via `cmd/agent/main.go`.
 - **UI Consistency**: Follow the pattern in `VolumesView.vue` for new list views (pagination, friendly name resolution, and standardized headers).
 - **GitOps Logic**: The `GitWorker` in `internal/manager/git_worker.go` is the heartbeat of deployment; ensure all stack operations are idempotent.
+- **Image Update Polling**: `ImagePoller` in `internal/manager/image_poller.go` handles periodic scanning of unique image+platform pairs, pulling updates to nodes, and rolling restarts (scale -1/+1 for replicas, node-by-node kill for global).

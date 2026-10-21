@@ -177,12 +177,36 @@ This view is the engine room of Halyard's **GitOps Git-to-Cluster integration**.
 
 ---
 
-## 11. Event Audit Trail
+## 11. Container Image Updates & Automated Stack Restarts
+
+Halyard includes an automated background image poller that scans remote image registries, downloads updated tags directly to relevant cluster nodes, and optionally triggers rolling restarts of matching Swarm services.
+
+### 📊 What You Can See
+* **Settings (`/settings`)**:
+  * **Update Check Interval**: Configurable timer (in hours) defining how frequently Halyard scans all unique image+platform pairs in the Swarm.
+  * **Update Stacks Option**: Toggle controlling whether affected services should be automatically restarted upon pulling new images.
+
+### ⚙️ Operator Actions
+* **Configure Polling Timer**: Set the update check interval anywhere from 1 to 72 hours (or set to `0` to disable automatic background checks).
+* **Toggle Update Stacks**: Enable the **Update stacks** checkbox to automatically restart services when newer images are detected.
+  * **Replicated Services**: Restarts tasks progressively by scaling down by 1 replica and back up (`scale -1 then +1`) with zero downtime.
+  * **Global Services**: Kills containers node by node with progressive delays, prompting Docker Swarm to respawn fresh containers using the newly pulled image.
+* **Check for Updates Now**: Instantly trigger an on-demand cluster-wide image poll with real-time feedback.
+
+### 📝 Logging Behavior
+Halyard's stdout/stderr log features high-signal output during image polling:
+* When a poll begins: `Triggering global image update poll`
+* When a newer image version is detected and pulled to a node: `Found new image for <image url>, pulling to node <node-name>`
+* Images that are already up to date are silently skipped to prevent log spam.
+
+---
+
+## 12. Event Audit Trail
 
 Monitor the history of all environment changes in a unified view.
 
 ### 📊 What You Can See
-* **Chronological Events**: Logs every GitOps action, manual sync trigger, resource prune, and container deployment event with full commit descriptions and timestamps.
+* **Chronological Events**: Logs every GitOps action, manual sync trigger, image update pull, resource prune, and container deployment event with full commit descriptions and timestamps.
 
 ### ⚙️ Operator Actions
 * **Filter Logs**: Search event listings to isolate deployment errors.
