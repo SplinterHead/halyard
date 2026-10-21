@@ -470,9 +470,6 @@ const runningContainersCount = computed(
 const stoppedContainersCount = computed(
   () => containers.value.filter((c: any) => c.state !== "running").length,
 );
-const runningContainers = computed(
-  () => containers.value.filter((c: any) => c.state === "running").length,
-);
 
 const outOfDateSyncsCount = computed(
   () => syncs.value.filter((s: any) => s.last_status === "Out of Date").length,

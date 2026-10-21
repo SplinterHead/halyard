@@ -215,7 +215,6 @@ import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import RelativeTime from '../../components/RelativeTime.vue'
-import Loader from '../../components/Loader.vue'
 
 const searchQuery = ref('')
 

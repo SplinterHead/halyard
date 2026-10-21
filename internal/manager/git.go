@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"sync"
 	"time"
 
 	"github.com/go-git/go-billy/v5/memfs"
@@ -21,7 +20,6 @@ import (
 
 type GitManager struct {
 	db *DB
-	mu sync.RWMutex
 }
 
 func NewGitManager(db *DB) *GitManager {
@@ -167,7 +165,7 @@ func (m *GitManager) ListFiles(repo api.GitRepository, branch, rootPath string) 
 		entries = append(entries, api.FileEntry{
 			Name:  entry.Name,
 			Path:  path.Join(rootPath, entry.Name),
-			IsDir: entry.Mode.IsFile() == false,
+			IsDir: !entry.Mode.IsFile(),
 		})
 	}
 

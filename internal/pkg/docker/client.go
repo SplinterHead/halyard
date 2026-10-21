@@ -28,15 +28,6 @@ func NewClient() (*Client, error) {
 	return &Client{cli}, nil
 }
 
-// CheckSwarm checks if the current node is part of a swarm
-func (c *Client) CheckSwarm(ctx context.Context) (bool, error) {
-	info, err := c.Info(ctx)
-	if err != nil {
-		return false, err
-	}
-	return info.Swarm.LocalNodeState == "active", nil
-}
-
 func (c *Client) Prune(ctx context.Context, containers, networks, volumes, images, imagesAll bool) error {
 	if containers {
 		if _, err := c.ContainersPrune(ctx, filters.Args{}); err != nil {
@@ -168,7 +159,7 @@ func (c *Client) RunHostCommand(ctx context.Context, command string) (string, er
 	case status := <-statusCh:
 		if status.Error != nil {
 			c.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
-			return "", fmt.Errorf(status.Error.Message)
+			return "", fmt.Errorf("%s", status.Error.Message)
 		}
 		exitCode = status.StatusCode
 	}

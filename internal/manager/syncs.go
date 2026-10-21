@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/SplinterHead/halyard/api"
@@ -18,7 +17,6 @@ type GitSyncManager struct {
 	gitMgr      *GitManager
 	stackMgr    *StackManager
 	registryMgr *RegistryManager
-	mu          sync.RWMutex
 }
 
 func NewGitSyncManager(db *DB, gitMgr *GitManager, stackMgr *StackManager, registryMgr *RegistryManager) *GitSyncManager {

@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 
@@ -75,51 +74,6 @@ func (m *ContainerAggregator) GetContainerDetail(ctx context.Context, id, nodeNa
 
 	detail.Node = nodeName
 	return detail, nil
-}
-
-func (m *ContainerAggregator) ProxyLogs(ctx context.Context, id, nodeName string, w http.ResponseWriter) error {
-	agentIP, err := m.getAgentIP(ctx, nodeName)
-	if err != nil {
-		return err
-	}
-
-	resp, err := m.client.Get(fmt.Sprintf("https://%s:9090/containers/logs?id=%s", agentIP, id))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if err := agentclient.ParseError(resp, http.StatusOK); err != nil {
-		return err
-	}
-
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("Transfer-Encoding", "chunked")
-	
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return fmt.Errorf("streaming not supported")
-	}
-
-	buf := make([]byte, 4096)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			n, err := resp.Body.Read(buf)
-			if n > 0 {
-				w.Write(buf[:n])
-				flusher.Flush()
-			}
-			if err != nil {
-				if err == io.EOF {
-					return nil
-				}
-				return err
-			}
-		}
-	}
 }
 
 func (m *ContainerAggregator) getAgentIP(ctx context.Context, nodeName string) (string, error) {

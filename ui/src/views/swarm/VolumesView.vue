@@ -155,7 +155,6 @@
 <script setup lang="ts">
 import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from 'vue'
-import Loader from '../../components/Loader.vue'
 import RelativeTime from '../../components/RelativeTime.vue'
 
 const searchQuery = ref('')

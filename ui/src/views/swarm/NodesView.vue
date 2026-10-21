@@ -173,7 +173,6 @@
 import DataTablePage from "../../components/DataTablePage.vue";
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import Loader from '../../components/Loader.vue'
 
 const searchQuery = ref('')
 

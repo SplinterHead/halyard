@@ -87,10 +87,6 @@ func (m *NetworkAggregator) CreateNetwork(ctx context.Context, req api.NetworkCr
 		Labels:     req.Labels,
 	}
 
-	if req.Driver == "overlay" {
-		opts.CheckDuplicate = true
-	}
-
 	if req.IPAM != nil && req.IPAM.Subnet != "" {
 		opts.IPAM = &network.IPAM{
 			Config: []network.IPAMConfig{
