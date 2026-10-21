@@ -42,6 +42,10 @@ func TestNormalizeImageRef(t *testing.T) {
 		{"nginx:1.25", "nginx", "1.25"},
 		{"docker.io/library/ubuntu:22.04", "ubuntu", "22.04"},
 		{"ghcr.io/foo/bar:latest@sha256:abc", "ghcr.io/foo/bar", "latest"},
+		{"linuxserver/sonarr:latest@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc", "linuxserver/sonarr", "latest"},
+		{"localhost:5000/app:1.0", "localhost:5000/app", "1.0"},
+		{"registry.example.com:5000/org/app:v2.1@sha256:deadbeef", "registry.example.com:5000/org/app", "v2.1"},
+		{"localhost:5000/app", "localhost:5000/app", "latest"},
 	}
 
 	for _, tc := range tests {

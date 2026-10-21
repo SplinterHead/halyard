@@ -21,6 +21,18 @@ func NewImageManager(cli *docker.Client) *ImageManager {
 	return &ImageManager{docker: cli}
 }
 
+func parseRepoTag(ref string) (repo, tag string) {
+	if atIdx := strings.Index(ref, "@"); atIdx != -1 {
+		ref = ref[:atIdx]
+	}
+	lastColon := strings.LastIndex(ref, ":")
+	lastSlash := strings.LastIndex(ref, "/")
+	if lastColon > lastSlash && lastColon != -1 {
+		return ref[:lastColon], ref[lastColon+1:]
+	}
+	return ref, "latest"
+}
+
 func (m *ImageManager) ListImages(ctx context.Context) ([]api.ImageInfo, error) {
 	// 1. Get host system architecture from docker daemon Info
 	info, err := m.docker.Info(ctx)
@@ -35,19 +47,40 @@ func (m *ImageManager) ListImages(ctx context.Context) ([]api.ImageInfo, error) 
 		return nil, err
 	}
 
-	// 3. Get in-use image IDs from all local containers
+	// 3. Get in-use image IDs and image strings from all local containers
 	containers, _ := m.docker.ContainerList(ctx, container.ListOptions{All: true})
 	inUseMap := make(map[string]bool)
+	containerImageMap := make(map[string]string)
 	for _, c := range containers {
 		inUseMap[c.ImageID] = true
+		if c.Image != "" {
+			containerImageMap[c.ImageID] = c.Image
+		}
 	}
 
 	images := make([]api.ImageInfo, 0)
 	for _, img := range list {
 		inUse := inUseMap[img.ID]
 
-		// Handle untagged images (<none>:<none>)
-		if len(img.RepoTags) == 0 {
+		// Resolve tags for this image
+		tags := make([]string, 0)
+		for _, rt := range img.RepoTags {
+			if rt != "" && rt != "<none>:<none>" {
+				tags = append(tags, rt)
+			}
+		}
+
+		// If no valid RepoTags (common for Swarm digest-pulled images), fallback to container image or RepoDigests
+		if len(tags) == 0 {
+			if cImg, ok := containerImageMap[img.ID]; ok && cImg != "" {
+				tags = append(tags, cImg)
+			} else if len(img.RepoDigests) > 0 && img.RepoDigests[0] != "" {
+				tags = append(tags, img.RepoDigests[0])
+			}
+		}
+
+		// If still completely untagged
+		if len(tags) == 0 {
 			images = append(images, api.ImageInfo{
 				ID:           img.ID,
 				Repository:   "<none>",
@@ -61,12 +94,10 @@ func (m *ImageManager) ListImages(ctx context.Context) ([]api.ImageInfo, error) 
 		}
 
 		// List an entry for each tag associated with the image
-		for _, repoTag := range img.RepoTags {
-			repo := repoTag
-			tag := "latest"
-			if parts := strings.SplitN(repoTag, ":", 2); len(parts) == 2 {
-				repo = parts[0]
-				tag = parts[1]
+		for _, repoTag := range tags {
+			repo, tag := parseRepoTag(repoTag)
+			if (repo == "" || repo == "<none>") && containerImageMap[img.ID] != "" {
+				repo, tag = parseRepoTag(containerImageMap[img.ID])
 			}
 
 			images = append(images, api.ImageInfo{
@@ -107,15 +138,24 @@ func (m *ImageManager) CheckImageUpToDate(ctx context.Context, repository string
 		return false, fmt.Errorf("remote registry returned an empty digest")
 	}
 
-	img, _, err := m.docker.ImageInspectWithRaw(ctx, localImageID)
+	target := localImageID
+	if target == "" {
+		target = imageTag
+	}
+
+	img, _, err := m.docker.ImageInspectWithRaw(ctx, target)
 	if err != nil {
-		return false, err
+		// Image is not locally present on this node; pull required
+		return false, nil
 	}
 
 	for _, d := range img.RepoDigests {
 		if strings.Contains(d, remoteDigest) {
 			return true, nil
 		}
+	}
+	if strings.Contains(img.ID, remoteDigest) {
+		return true, nil
 	}
 
 	return false, nil

@@ -135,7 +135,7 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 		return &result, err
 	}
 
-	// 2. Gather Swarm services and nodes
+	// 2. Gather Swarm services, nodes, and running tasks
 	services, err := p.svcMgr.ListServices(ctx)
 	if err != nil {
 		log.Printf("ImagePoller: Warning - failed to list swarm services: %v", err)
@@ -144,27 +144,137 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 
 	nodes, _ := p.docker.NodeList(ctx, types.NodeListOptions{})
 	nodeHostnameMap := make(map[string]string)
+	nodeArchMap := make(map[string]string)
+	allActiveNodeIDs := make([]string, 0)
 	for _, n := range nodes {
 		nodeHostnameMap[n.ID] = n.Description.Hostname
+		arch := n.Description.Platform.Architecture
+		if arch == "" {
+			arch = "unknown"
+		}
+		nodeArchMap[n.ID] = arch
+		if string(n.Status.State) == "ready" && string(n.Spec.Availability) == "active" {
+			allActiveNodeIDs = append(allActiveNodeIDs, n.ID)
+		}
+	}
+	if len(allActiveNodeIDs) == 0 {
+		for _, n := range nodes {
+			allActiveNodeIDs = append(allActiveNodeIDs, n.ID)
+		}
 	}
 
-	// 3. Group images by unique Repository + Tag + Architecture
-	uniqueImages := make(map[string]*uniqueImageEntry)
+	// Map service ID -> set of node IDs where service tasks run
+	tasks, _ := p.docker.TaskList(ctx, types.TaskListOptions{})
+	serviceNodesMap := make(map[string]map[string]bool)
+	for _, t := range tasks {
+		if t.NodeID == "" || t.ServiceID == "" {
+			continue
+		}
+		if t.DesiredState == "running" || t.Status.State == "running" {
+			if _, ok := serviceNodesMap[t.ServiceID]; !ok {
+				serviceNodesMap[t.ServiceID] = make(map[string]bool)
+			}
+			serviceNodesMap[t.ServiceID][t.NodeID] = true
+		}
+	}
+
+	// Index node local image IDs: nodeID -> normalized(repo:tag) -> imageID
+	nodeImageMap := make(map[string]map[string]string)
 	for _, img := range allImages {
 		if img.Repository == "" || img.Repository == "<none>" || img.Tag == "" || img.Tag == "<none>" {
 			continue
 		}
-		if strings.Contains(img.Repository, "sha256:") || strings.Contains(img.Tag, "sha256:") {
+		r, t := normalizeImageRef(img.Repository + ":" + img.Tag)
+		if r == "" || t == "" {
+			continue
+		}
+		if _, ok := nodeImageMap[img.NodeID]; !ok {
+			nodeImageMap[img.NodeID] = make(map[string]string)
+		}
+		nodeImageMap[img.NodeID][r+":"+t] = img.ID
+	}
+
+	uniqueImages := make(map[string]*uniqueImageEntry)
+
+	// 3a. Discover images defined across all Swarm Services across all stacks
+	for _, svc := range services {
+		if svc.Image == "" {
+			continue
+		}
+		repo, tag := normalizeImageRef(svc.Image)
+		if repo == "" || repo == "<none>" || tag == "" || tag == "<none>" {
 			continue
 		}
 
-		key := fmt.Sprintf("%s:%s|%s", img.Repository, img.Tag, img.Architecture)
+		targetNodeIDs := make([]string, 0)
+		if svc.Mode == "global" {
+			targetNodeIDs = allActiveNodeIDs
+		} else if nodeSet, ok := serviceNodesMap[svc.ID]; ok && len(nodeSet) > 0 {
+			for nID := range nodeSet {
+				targetNodeIDs = append(targetNodeIDs, nID)
+			}
+		} else {
+			targetNodeIDs = allActiveNodeIDs
+		}
+
+		for _, nodeID := range targetNodeIDs {
+			arch := nodeArchMap[nodeID]
+			if arch == "" {
+				arch = "unknown"
+			}
+			key := fmt.Sprintf("%s:%s|%s", repo, tag, arch)
+			entry, ok := uniqueImages[key]
+			if !ok {
+				entry = &uniqueImageEntry{
+					Repository:   repo,
+					Tag:          tag,
+					Architecture: arch,
+					Nodes:        make([]string, 0),
+					NodeMap:      make(map[string]string),
+					NodeNames:    make(map[string]string),
+				}
+				uniqueImages[key] = entry
+			}
+
+			if _, exists := entry.NodeNames[nodeID]; !exists {
+				entry.Nodes = append(entry.Nodes, nodeID)
+				nodeName := nodeHostnameMap[nodeID]
+				if nodeName == "" {
+					nodeName = nodeID
+				}
+				entry.NodeNames[nodeID] = nodeName
+			}
+			if localID, ok := nodeImageMap[nodeID][repo+":"+tag]; ok && localID != "" {
+				entry.NodeMap[nodeID] = localID
+			}
+		}
+	}
+
+	// 3b. Also discover any standalone or unmanaged images present on nodes
+	for _, img := range allImages {
+		if img.Repository == "" || img.Repository == "<none>" || img.Tag == "" || img.Tag == "<none>" {
+			continue
+		}
+		repo, tag := normalizeImageRef(img.Repository + ":" + img.Tag)
+		if repo == "" || repo == "<none>" || tag == "" || tag == "<none>" {
+			continue
+		}
+
+		arch := img.Architecture
+		if arch == "" || arch == "unknown" {
+			arch = nodeArchMap[img.NodeID]
+		}
+		if arch == "" {
+			arch = "unknown"
+		}
+
+		key := fmt.Sprintf("%s:%s|%s", repo, tag, arch)
 		entry, ok := uniqueImages[key]
 		if !ok {
 			entry = &uniqueImageEntry{
-				Repository:   img.Repository,
-				Tag:          img.Tag,
-				Architecture: img.Architecture,
+				Repository:   repo,
+				Tag:          tag,
+				Architecture: arch,
 				Nodes:        make([]string, 0),
 				NodeMap:      make(map[string]string),
 				NodeNames:    make(map[string]string),
@@ -172,14 +282,16 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 			uniqueImages[key] = entry
 		}
 
-		if _, exists := entry.NodeMap[img.NodeID]; !exists {
+		if _, exists := entry.NodeNames[img.NodeID]; !exists {
 			entry.Nodes = append(entry.Nodes, img.NodeID)
-			entry.NodeMap[img.NodeID] = img.ID
 			nodeName := img.Node
 			if nodeName == "" {
 				nodeName = nodeHostnameMap[img.NodeID]
 			}
 			entry.NodeNames[img.NodeID] = nodeName
+		}
+		if img.ID != "" {
+			entry.NodeMap[img.NodeID] = img.ID
 		}
 	}
 
@@ -216,7 +328,6 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 		}
 
 		// An update is available!
-		log.Printf("ImagePoller: Update detected for %s (%s)!", imageRef, entry.Architecture)
 		updatedCount++
 
 		// Pull the updated image to all relevant nodes with this platform
@@ -229,7 +340,6 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 				log.Printf("ImagePoller: %s", errMsg)
 				result.Details = append(result.Details, errMsg)
 			} else {
-				log.Printf("ImagePoller: Successfully pulled %s to node %s", imageRef, nodeName)
 				pulledNodes = append(pulledNodes, nodeName)
 			}
 		}
@@ -269,6 +379,7 @@ func (p *ImagePoller) restartMatchingServices(
 	nodeHostnameMap map[string]string,
 ) []string {
 	restarted := make([]string, 0)
+	targetImage := repo + ":" + tag
 
 	for _, svc := range services {
 		if !imageMatches(svc.Image, repo, tag) {
@@ -277,6 +388,12 @@ func (p *ImagePoller) restartMatchingServices(
 
 		log.Printf("ImagePoller: Service %s (mode: %s) uses updated image %s:%s, triggering restart...",
 			svc.Name, svc.Mode, repo, tag)
+
+		// If the service's image is pinned to an old digest (@sha256:...), update it to the clean repo:tag
+		// so Docker Swarm resolves and runs the updated image!
+		if strings.Contains(svc.Image, "@sha256:") {
+			p.updateServiceImage(ctx, svc.ID, targetImage)
+		}
 
 		if svc.Mode == "global" {
 			// Global services: kill the service node by node
@@ -290,6 +407,22 @@ func (p *ImagePoller) restartMatchingServices(
 	}
 
 	return restarted
+}
+
+func (p *ImagePoller) updateServiceImage(ctx context.Context, serviceID, newImage string) {
+	service, _, err := p.docker.ServiceInspectWithRaw(ctx, serviceID, types.ServiceInspectOptions{})
+	if err != nil {
+		log.Printf("ImagePoller: Failed to inspect service %s for image update: %v", serviceID, err)
+		return
+	}
+	service.Spec.TaskTemplate.ContainerSpec.Image = newImage
+	service.Spec.TaskTemplate.ForceUpdate++
+	_, err = p.docker.ServiceUpdate(ctx, serviceID, service.Version, service.Spec, types.ServiceUpdateOptions{
+		QueryRegistry: true,
+	})
+	if err != nil {
+		log.Printf("ImagePoller: Failed to update service %s image to %s: %v", serviceID, newImage, err)
+	}
 }
 
 // restartReplicatedService scales -1 then +1 for replicated services
