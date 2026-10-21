@@ -65,3 +65,18 @@ func NewStreamingClient(token string) *http.Client {
 		},
 	}
 }
+
+// NewPullClient returns an *http.Client configured for image pull operations
+// with no client timeout, relying on context cancellation instead.
+func NewPullClient(token string) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+	return &http.Client{
+		Transport: &tokenAuthRoundTripper{
+			token: token,
+			rt:    transport,
+		},
+	}
+}
+

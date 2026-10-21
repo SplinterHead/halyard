@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -118,5 +119,20 @@ func (m *ImageManager) CheckImageUpToDate(ctx context.Context, repository string
 	}
 
 	return false, nil
+}
+
+func (m *ImageManager) PullImage(ctx context.Context, repository string, tag string, encodedAuth string) error {
+	imageTag := repository + ":" + tag
+	reader, err := m.docker.ImagePull(ctx, imageTag, image.PullOptions{
+		RegistryAuth: encodedAuth,
+	})
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	// Consume entire response stream to ensure pull completes
+	_, err = io.Copy(io.Discard, reader)
+	return err
 }
 

@@ -242,6 +242,29 @@ func main() {
 		json.NewEncoder(w).Encode(response)
 	})
 
+	http.HandleFunc("/images/pull", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		repo := r.URL.Query().Get("repository")
+		tag := r.URL.Query().Get("tag")
+		auth := r.Header.Get("X-Registry-Auth")
+
+		if repo == "" || tag == "" {
+			http.Error(w, "repository and tag are required", http.StatusBadRequest)
+			return
+		}
+
+		if err := imgMgr.PullImage(r.Context(), repo, tag, auth); err != nil {
+			log.Printf("Agent: Failed to pull image %s:%s: %v", repo, tag, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
 	http.HandleFunc("/containers/detail", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id")
 		if id == "" {
