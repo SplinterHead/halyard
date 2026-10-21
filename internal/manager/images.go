@@ -4,28 +4,32 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/SplinterHead/halyard/api"
 	"github.com/SplinterHead/halyard/internal/pkg/agentclient"
 	"github.com/SplinterHead/halyard/internal/pkg/docker"
+	"github.com/docker/docker/api/types"
 )
 
 type ImageAggregator struct {
-	docker   *docker.Client
-	client   *http.Client
-	agentDir *AgentDirectory
+	docker     *docker.Client
+	client     *http.Client
+	pullClient *http.Client
+	agentDir   *AgentDirectory
 }
 
 func NewImageAggregator(cli *docker.Client, agentDir *AgentDirectory) *ImageAggregator {
 	token := os.Getenv("HALYARD_AGENT_TOKEN")
 	return &ImageAggregator{
-		docker:   cli,
-		client:   agentclient.NewClient(token),
-		agentDir: agentDir,
+		docker:     cli,
+		client:     agentclient.NewClient(token),
+		pullClient: agentclient.NewPullClient(token),
+		agentDir:   agentDir,
 	}
 }
 
@@ -41,6 +45,9 @@ func (m *ImageAggregator) ListAllImages(ctx context.Context) ([]api.ImageInfo, e
 	}
 
 	activeAgents := m.agentDir.GetAllAgents()
+	if len(activeAgents) == 0 {
+		log.Println("ImagePoller: Warning - 0 active agents registered in AgentDirectory yet")
+	}
 
 	mutator := func(item *api.ImageInfo, nodeID string) {
 		item.Node = nodeMap[nodeID]
@@ -122,3 +129,39 @@ func (m *ImageAggregator) CheckImage(ctx context.Context, nodeID string, reposit
 	return result.UpToDate, nil
 }
 
+func (m *ImageAggregator) PullImage(ctx context.Context, nodeID string, repository string, tag string, registryAuth string) error {
+	pullCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
+	defer cancel()
+
+	ip, ok := m.agentDir.GetAgentIP(nodeID)
+	if !ok {
+		return fmt.Errorf("agent not found or not running on node %s", nodeID)
+	}
+
+	pullURL := fmt.Sprintf(
+		"https://%s:9090/images/pull?repository=%s&tag=%s",
+		ip,
+		url.QueryEscape(repository),
+		url.QueryEscape(tag),
+	)
+	req, err := http.NewRequestWithContext(pullCtx, http.MethodPost, pullURL, nil)
+	if err != nil {
+		return err
+	}
+
+	if registryAuth != "" {
+		req.Header.Set("X-Registry-Auth", registryAuth)
+	}
+
+	resp, err := m.pullClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if err := agentclient.ParseError(resp, http.StatusOK); err != nil {
+		return fmt.Errorf("agent pull error: %w", err)
+	}
+
+	return nil
+}

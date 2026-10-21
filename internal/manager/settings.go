@@ -22,17 +22,22 @@ func (m *SettingsManager) GetSettings() api.Settings {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	defaultSettings := api.Settings{
+		GitSyncConcurrency:  5,
+		GitSyncInterval:     5,
+		ImageUpdateInterval: 0,
+		UpdateStacks:        false,
+	}
+
 	var val string
 	err := m.db.QueryRow("SELECT value FROM settings WHERE key = 'git_sync_concurrency'").Scan(&val)
 	if err != nil {
-		return api.Settings{GitSyncConcurrency: 5} // Default
+		return defaultSettings
 	}
 
-	var s api.Settings
+	s := defaultSettings
 	if err := json.Unmarshal([]byte(val), &s); err != nil {
-		return api.Settings{
-			GitSyncConcurrency: 5,
-		}
+		return defaultSettings
 	}
 	return s
 }

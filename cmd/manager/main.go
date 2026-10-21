@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -56,6 +55,9 @@ func main() {
 
 	statsWorker := manager.NewStatsWorker(nodeMgr, db)
 	go statsWorker.Start(context.Background())
+
+	imagePoller := manager.NewImagePoller(cli, imgAgg, svcMgr, contAgg, registryMgr, settingsMgr, db)
+	go imagePoller.Start(context.Background())
 
 	// API Endpoints
 	http.HandleFunc("/api/internal/heartbeat", func(w http.ResponseWriter, r *http.Request) {
@@ -808,6 +810,50 @@ func main() {
 		json.NewEncoder(w).Encode(response)
 	})
 
+	http.HandleFunc("/api/images/pull", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		nodeID := r.URL.Query().Get("node_id")
+		repo := r.URL.Query().Get("repository")
+		tag := r.URL.Query().Get("tag")
+
+		if nodeID == "" || repo == "" || tag == "" {
+			http.Error(w, "node_id, repository, and tag are required", http.StatusBadRequest)
+			return
+		}
+
+		registries, _ := registryMgr.ListRegistries()
+		registryAuth := manager.GetEncodedRegistryAuth(repo, registries)
+
+		if err := imgAgg.PullImage(r.Context(), nodeID, repo, tag, registryAuth); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	http.HandleFunc("/api/images/poll", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			result, err := imagePoller.Poll(r.Context())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+			return
+		}
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(imagePoller.GetStatus())
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
+
 	http.HandleFunc("/api/containers/detail", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id")
 		node := r.URL.Query().Get("node")
@@ -1460,70 +1506,7 @@ func main() {
 }
 
 func getEncodedRegistryAuth(repo string, registries []api.Registry) string {
-	registryHost := "docker.io" // Default Docker Hub
-	parts := strings.Split(repo, "/")
-	if len(parts) > 1 && (strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":")) {
-		registryHost = parts[0]
-	}
-
-	var matchedUser, matchedPass, matchedURL string
-	
-	cleanRegistryURL := func(u string) string {
-		u = strings.TrimPrefix(u, "https://")
-		u = strings.TrimPrefix(u, "http://")
-		u = strings.TrimSuffix(u, "/v1")
-		u = strings.TrimSuffix(u, "/v1/")
-		u = strings.TrimSuffix(u, "/v2")
-		u = strings.TrimSuffix(u, "/v2/")
-		u = strings.TrimSuffix(u, "/")
-		return strings.ToLower(u)
-	}
-
-	cleanHost := cleanRegistryURL(registryHost)
-
-	for _, reg := range registries {
-		cleanURL := cleanRegistryURL(reg.URL)
-		if strings.Contains(cleanURL, cleanHost) || strings.Contains(cleanHost, cleanURL) {
-			matchedUser = reg.Username
-			matchedPass = reg.Password
-			matchedURL = reg.URL
-			break
-		}
-	}
-
-	// If it's docker.io / Docker Hub, and we found no matched credential, look for named Docker Hub registries
-	if registryHost == "docker.io" && matchedUser == "" {
-		for _, reg := range registries {
-			cleanURL := cleanRegistryURL(reg.URL)
-			if strings.Contains(cleanURL, "docker.io") || strings.Contains(strings.ToLower(reg.Name), "docker hub") {
-				matchedUser = reg.Username
-				matchedPass = reg.Password
-				matchedURL = reg.URL
-				break
-			}
-		}
-	}
-
-	if matchedUser == "" || matchedPass == "" {
-		return ""
-	}
-
-	authConfig := struct {
-		Username      string `json:"username"`
-		Password      string `json:"password"`
-		ServerAddress string `json:"serveraddress,omitempty"`
-	}{
-		Username:      matchedUser,
-		Password:      matchedPass,
-		ServerAddress: matchedURL,
-	}
-
-	jsonData, err := json.Marshal(authConfig)
-	if err != nil {
-		return ""
-	}
-
-	return base64.URLEncoding.EncodeToString(jsonData)
+	return manager.GetEncodedRegistryAuth(repo, registries)
 }
 
 func AuthMiddleware(db *manager.DB, secret []byte, next http.Handler) http.Handler {

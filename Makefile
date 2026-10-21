@@ -9,6 +9,14 @@ build-manager:
 build-agent:
 	docker build -t halyard-agent:latest -f deploy/agent.Dockerfile .
 
+run: clean build-all
+	docker stack rm halyard
+	sleep 5
+	docker stack deploy --compose-file deploy/docker-stack.yml halyard
+
+stop:
+	docker stack rm halyard
+
 push-manager-multi:
 	docker buildx build --push --platform $(PLATFORMS) -t splinterhead27/halyard-manager:latest -t splinterhead27/halyard-manager:v$(VERSION) -f deploy/manager.Dockerfile .
 

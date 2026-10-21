@@ -187,8 +187,21 @@ type GitSync struct {
 
 // Settings represents application-wide configuration
 type Settings struct {
-	GitSyncInterval    int `json:"git_sync_interval"` // In minutes
-	GitSyncConcurrency int `json:"git_sync_concurrency"`
+	GitSyncInterval     int  `json:"git_sync_interval"`     // In minutes
+	GitSyncConcurrency  int  `json:"git_sync_concurrency"`
+	ImageUpdateInterval int  `json:"image_update_interval"` // In hours (0 = disabled)
+	UpdateStacks        bool `json:"update_stacks"`         // Automatically restart services that have new images
+}
+
+// ImagePollResult holds the execution outcome of an image update poll
+type ImagePollResult struct {
+	CheckedAt          time.Time `json:"checked_at"`
+	Status             string    `json:"status"` // "success", "error", "running", "idle"
+	UniqueImagesCount  int       `json:"unique_images_count"`
+	UpdatedImagesCount int       `json:"updated_images_count"`
+	RestartedServices  []string  `json:"restarted_services"`
+	Details            []string  `json:"details"`
+	Error              string    `json:"error,omitempty"`
 }
 
 type DeploymentEvent struct {

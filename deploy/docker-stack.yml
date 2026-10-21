@@ -1,12 +1,12 @@
 services:
   manager:
-    image: splinterhead27/halyard-manager:latest
+    image: halyard-manager:latest
     environment:
       HALYARD_AGENT_TOKEN: ${HALYARD_AGENT_TOKEN:-default-internal-token-change-me}
     networks:
       - halyard
     ports:
-      - 8080:8080
+      - 8888:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - halyard_data:/data
@@ -20,7 +20,7 @@ services:
         - traefik.http.services.halyard.loadbalancer.server.port=8080
 
   agent:
-    image: splinterhead27/halyard-agent:latest
+    image: halyard-agent:latest
     environment:
       HOST_PROC: /host/proc
       HOST_SYS: /host/sys

@@ -2,7 +2,7 @@ package manager
 
 import (
 	"context"
-	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -68,16 +68,6 @@ func (m *RegistryManager) UpdateRegistry(r api.Registry) (api.Registry, error) {
 func (m *RegistryManager) DeleteRegistry(id string) error {
 	_, err := m.db.Exec("DELETE FROM registries WHERE id = ?", id)
 	return err
-}
-
-func (m *RegistryManager) GetRegistry(id string) (api.Registry, bool) {
-	var r api.Registry
-	err := m.db.QueryRow("SELECT id, name, url, username, password, created_at FROM registries WHERE id = ?", id).
-		Scan(&r.ID, &r.Name, &r.URL, &r.Username, &r.Password, &r.CreatedAt)
-	if err == sql.ErrNoRows {
-		return api.Registry{}, false
-	}
-	return r, true
 }
 
 // FetchDockerHubRateLimit queries Docker Hub for the current pull limits and remaining quota
@@ -152,4 +142,72 @@ func FetchDockerHubRateLimit(ctx context.Context, username, password string) (*a
 		Remaining: remaining,
 		Reset:     reset,
 	}, nil
+}
+
+// GetEncodedRegistryAuth returns base64 url-encoded credentials matching the given repository
+func GetEncodedRegistryAuth(repo string, registries []api.Registry) string {
+	registryHost := "docker.io" // Default Docker Hub
+	parts := strings.Split(repo, "/")
+	if len(parts) > 1 && (strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":")) {
+		registryHost = parts[0]
+	}
+
+	var matchedUser, matchedPass, matchedURL string
+	
+	cleanRegistryURL := func(u string) string {
+		u = strings.TrimPrefix(u, "https://")
+		u = strings.TrimPrefix(u, "http://")
+		u = strings.TrimSuffix(u, "/v1")
+		u = strings.TrimSuffix(u, "/v1/")
+		u = strings.TrimSuffix(u, "/v2")
+		u = strings.TrimSuffix(u, "/v2/")
+		u = strings.TrimSuffix(u, "/")
+		return strings.ToLower(u)
+	}
+
+	cleanHost := cleanRegistryURL(registryHost)
+
+	for _, reg := range registries {
+		cleanURL := cleanRegistryURL(reg.URL)
+		if strings.Contains(cleanURL, cleanHost) || strings.Contains(cleanHost, cleanURL) {
+			matchedUser = reg.Username
+			matchedPass = reg.Password
+			matchedURL = reg.URL
+			break
+		}
+	}
+
+	// If it's docker.io / Docker Hub, and we found no matched credential, look for named Docker Hub registries
+	if registryHost == "docker.io" && matchedUser == "" {
+		for _, reg := range registries {
+			cleanURL := cleanRegistryURL(reg.URL)
+			if strings.Contains(cleanURL, "docker.io") || strings.Contains(strings.ToLower(reg.Name), "docker hub") {
+				matchedUser = reg.Username
+				matchedPass = reg.Password
+				matchedURL = reg.URL
+				break
+			}
+		}
+	}
+
+	if matchedUser == "" || matchedPass == "" {
+		return ""
+	}
+
+	authConfig := struct {
+		Username      string `json:"username"`
+		Password      string `json:"password"`
+		ServerAddress string `json:"serveraddress,omitempty"`
+	}{
+		Username:      matchedUser,
+		Password:      matchedPass,
+		ServerAddress: matchedURL,
+	}
+
+	jsonData, err := json.Marshal(authConfig)
+	if err != nil {
+		return ""
+	}
+
+	return base64.URLEncoding.EncodeToString(jsonData)
 }
