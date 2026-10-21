@@ -83,6 +83,9 @@ func (m *ImageAggregator) DeleteImage(ctx context.Context, nodeID string, imageI
 }
 
 func (m *ImageAggregator) CheckImage(ctx context.Context, nodeID string, repository string, tag string, imageID string, registryAuth string) (bool, error) {
+	checkCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+
 	ip, ok := m.agentDir.GetAgentIP(nodeID)
 	if !ok {
 		return false, fmt.Errorf("agent not found or not running on node %s", nodeID)
@@ -95,7 +98,7 @@ func (m *ImageAggregator) CheckImage(ctx context.Context, nodeID string, reposit
 		url.QueryEscape(tag),
 		url.QueryEscape(imageID),
 	)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, checkURL, nil)
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodPost, checkURL, nil)
 	if err != nil {
 		return false, err
 	}
@@ -104,7 +107,7 @@ func (m *ImageAggregator) CheckImage(ctx context.Context, nodeID string, reposit
 		req.Header.Set("X-Registry-Auth", registryAuth)
 	}
 
-	resp, err := m.client.Do(req)
+	resp, err := m.pullClient.Do(req)
 	if err != nil {
 		return false, err
 	}

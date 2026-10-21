@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/SplinterHead/halyard/api"
@@ -837,7 +838,12 @@ func main() {
 
 	http.HandleFunc("/api/images/poll", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			result, err := imagePoller.Poll(r.Context())
+			// Run with an independent context so client disconnects, page reloads, or proxy timeouts
+			// do not abort in-flight cluster-wide image checks and pulls.
+			pollCtx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+			defer cancel()
+
+			result, err := imagePoller.Poll(pollCtx)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

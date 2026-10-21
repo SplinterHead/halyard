@@ -122,6 +122,8 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 		Details:           make([]string, 0),
 	}
 
+	deferredSelfRestarts := make([]deferredSelfRestart, 0)
+
 	log.Println("Triggering global image update poll")
 
 	// 1. Gather all images from all nodes
@@ -347,11 +349,12 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 
 		// If UpdateStacks is enabled, restart matching services
 		if settings.UpdateStacks {
-			restartedForImage := p.restartMatchingServices(ctx, entry.Repository, entry.Tag, services, auth)
+			restartedForImage, deferred := p.restartMatchingServices(ctx, entry.Repository, entry.Tag, services, auth)
 			if len(restartedForImage) > 0 {
 				result.RestartedServices = append(result.RestartedServices, restartedForImage...)
 				detailEntry += fmt.Sprintf(" | Restarted: %s", strings.Join(restartedForImage, ", "))
 			}
+			deferredSelfRestarts = append(deferredSelfRestarts, deferred...)
 		}
 
 		result.Details = append(result.Details, detailEntry)
@@ -366,7 +369,25 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 
 	log.Printf("ImagePoller: Poll complete. Checked: %d, Updated: %d, Restarted: %d service(s)", len(uniqueImages), updatedCount, len(result.RestartedServices))
 
+	// Trigger any deferred self-restarts (e.g. halyard_manager) last so the manager process is not killed midway through polling other stacks
+	for _, def := range deferredSelfRestarts {
+		log.Printf("ImagePoller: Triggering final deferred restart for self-service %s to %s:%s...", def.svc.Name, def.repo, def.tag)
+		_ = p.restartServiceWithImage(ctx, def.svc, def.repo, def.tag, def.auth)
+	}
+
 	return &result, nil
+}
+
+type deferredSelfRestart struct {
+	svc  api.Service
+	repo string
+	tag  string
+	auth string
+}
+
+func isSelfService(svc api.Service) bool {
+	name := strings.ToLower(svc.Name)
+	return name == "halyard_manager" || name == "halyard-manager" || (strings.Contains(name, "halyard") && strings.Contains(name, "manager"))
 }
 
 // restartMatchingServices handles triggering Docker Swarm's rolling update for all matching services
@@ -376,11 +397,20 @@ func (p *ImagePoller) restartMatchingServices(
 	tag string,
 	services []api.Service,
 	auth string,
-) []string {
+) ([]string, []deferredSelfRestart) {
 	restarted := make([]string, 0)
+	deferred := make([]deferredSelfRestart, 0)
 
 	for _, svc := range services {
 		if !imageMatches(svc.Image, repo, tag) {
+			continue
+		}
+
+		// Defer restarting halyard_manager itself until all other services finish
+		if isSelfService(svc) {
+			log.Printf("ImagePoller: Deferring restart of self-service %s until all other stack services finish updating", svc.Name)
+			deferred = append(deferred, deferredSelfRestart{svc: svc, repo: repo, tag: tag, auth: auth})
+			restarted = append(restarted, fmt.Sprintf("%s (%s - deferred)", svc.Name, svc.Mode))
 			continue
 		}
 
@@ -395,7 +425,7 @@ func (p *ImagePoller) restartMatchingServices(
 		restarted = append(restarted, fmt.Sprintf("%s (%s)", svc.Name, svc.Mode))
 	}
 
-	return restarted
+	return restarted, deferred
 }
 
 // restartServiceWithImage performs a zero-downtime rolling update on a Swarm service (replicated or global)
