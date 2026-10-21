@@ -39,13 +39,11 @@ func NewNodeManager(cli *docker.Client, db *DB, agentDir *AgentDirectory) *NodeM
 }
 
 func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
-	log.Println("Listing swarm nodes...")
 	nodes, err := m.docker.NodeList(ctx, types.NodeListOptions{})
 	if err != nil {
 		log.Printf("Error listing nodes: %v", err)
 		return nil, err
 	}
-	log.Printf("Found %d nodes in swarm", len(nodes))
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -69,7 +67,6 @@ func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
 			if ip, ok := m.agentDir.GetAgentIP(n.ID); ok {
 				// Fetch real stats from agent
 				url := fmt.Sprintf("https://%s:9090/stats", ip)
-				log.Printf("Fetching stats from agent at %s", url)
 				resp, err := m.client.Get(url)
 				if err != nil {
 					log.Printf("Failed to fetch stats from agent %s: %v", ip, err)
@@ -83,7 +80,6 @@ func (m *NodeManager) ListNodes(ctx context.Context) ([]api.NodeStats, error) {
 						stats.Uptime = agentStats.Uptime
 						stats.PendingUpdates = agentStats.PendingUpdates
 						stats.RestartRequired = agentStats.RestartRequired
-						log.Printf("Successfully received stats for node %s (%s)", n.ID, stats.Hostname)
 					} else {
 						log.Printf("Failed to decode stats from agent %s: %v", ip, err)
 					}
