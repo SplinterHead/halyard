@@ -54,7 +54,7 @@ func NewImagePoller(
 
 // Start runs the timer loop checking periodically if a poll is due
 func (p *ImagePoller) Start(ctx context.Context) {
-	log.Printf("ImagePoller: Background service started")
+	log.Printf("[Image Poller] Background service started")
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -75,7 +75,7 @@ func (p *ImagePoller) Start(ctx context.Context) {
 			if lastRun.IsZero() || time.Since(lastRun) >= intervalDuration {
 				_, err := p.Poll(ctx)
 				if err != nil {
-					log.Printf("ImagePoller: Scheduled poll returned error: %v", err)
+					log.Printf("[Image Poller] Scheduled poll returned error: %v", err)
 				}
 				lastRun = time.Now()
 			}
@@ -103,7 +103,7 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 	p.mu.Lock()
 	if p.isPolling {
 		p.mu.Unlock()
-		return nil, fmt.Errorf("an image update poll is already running")
+		return nil, fmt.Errorf("[Image Poller] an image update poll is already running")
 	}
 	p.isPolling = true
 	p.mu.Unlock()
@@ -124,7 +124,7 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 
 	deferredSelfRestarts := make([]deferredSelfRestart, 0)
 
-	log.Println("Triggering global image update poll")
+	log.Println("[Image Poller] Triggering global image update poll")
 
 	// 1. Gather all images from all nodes
 	allImages, err := p.imgAgg.ListAllImages(ctx)
@@ -132,14 +132,14 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 		result.Status = "error"
 		result.Error = fmt.Sprintf("failed to list swarm images: %v", err)
 		p.saveResult(result)
-		log.Printf("ImagePoller: Error listing swarm images: %v", err)
+		log.Printf("[Image Poller] Error listing swarm images: %v", err)
 		return &result, err
 	}
 
 	// 2. Gather Swarm services, nodes, and running tasks
 	services, err := p.svcMgr.ListServices(ctx)
 	if err != nil {
-		log.Printf("ImagePoller: Warning - failed to list swarm services: %v", err)
+		log.Printf("[Image Poller] Warning - failed to list swarm services: %v", err)
 		services = []api.Service{}
 	}
 
@@ -318,7 +318,7 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 
 		upToDate, checkErr := p.imgAgg.CheckImage(ctx, checkNodeID, entry.Repository, entry.Tag, localImageID, auth)
 		if checkErr != nil {
-			log.Printf("ImagePoller: Check failed for %s (%s): %v", imageRef, entry.Architecture, checkErr)
+			log.Printf("[Image Poller] Check failed for %s (%s): %v", imageRef, entry.Architecture, checkErr)
 			result.Details = append(result.Details, fmt.Sprintf("Error checking %s (%s): %v", imageRef, entry.Architecture, checkErr))
 			continue
 		}
@@ -335,10 +335,10 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 		pulledNodes := make([]string, 0)
 		for _, nodeID := range entry.Nodes {
 			nodeName := entry.NodeNames[nodeID]
-			log.Printf("Found new image for %s, pulling to node %s", imageRef, nodeName)
+			log.Printf("[Image Poller] Found new image for %s, pulling to node %s", imageRef, nodeName)
 			if pullErr := p.imgAgg.PullImage(ctx, nodeID, entry.Repository, entry.Tag, auth); pullErr != nil {
 				errMsg := fmt.Sprintf("Failed pulling %s to node %s: %v", imageRef, nodeName, pullErr)
-				log.Printf("ImagePoller: %s", errMsg)
+				log.Printf("[Image Poller] %s", errMsg)
 				result.Details = append(result.Details, errMsg)
 			} else {
 				pulledNodes = append(pulledNodes, nodeName)
@@ -367,11 +367,11 @@ func (p *ImagePoller) Poll(ctx context.Context) (*api.ImagePollResult, error) {
 	result.Status = "success"
 	p.saveResult(result)
 
-	log.Printf("ImagePoller: Poll complete. Checked: %d, Updated: %d, Restarted: %d service(s)", len(uniqueImages), updatedCount, len(result.RestartedServices))
+	log.Printf("[Image Poller] Poll complete. Checked: %d, Updated: %d, Restarted: %d service(s)", len(uniqueImages), updatedCount, len(result.RestartedServices))
 
 	// Trigger any deferred self-restarts (e.g. halyard_manager) last so the manager process is not killed midway through polling other stacks
 	for _, def := range deferredSelfRestarts {
-		log.Printf("ImagePoller: Triggering final deferred restart for self-service %s to %s:%s...", def.svc.Name, def.repo, def.tag)
+		log.Printf("[Image Poller] Triggering final deferred restart for self-service %s to %s:%s...", def.svc.Name, def.repo, def.tag)
 		_ = p.restartServiceWithImage(ctx, def.svc, def.repo, def.tag, def.auth)
 	}
 
@@ -408,17 +408,17 @@ func (p *ImagePoller) restartMatchingServices(
 
 		// Defer restarting halyard_manager itself until all other services finish
 		if isSelfService(svc) {
-			log.Printf("ImagePoller: Deferring restart of self-service %s until all other stack services finish updating", svc.Name)
+			log.Printf("[Image Poller] Deferring restart of self-service %s until all other stack services finish updating", svc.Name)
 			deferred = append(deferred, deferredSelfRestart{svc: svc, repo: repo, tag: tag, auth: auth})
 			restarted = append(restarted, fmt.Sprintf("%s (%s - deferred)", svc.Name, svc.Mode))
 			continue
 		}
 
-		log.Printf("ImagePoller: Service %s (mode: %s) uses updated image %s:%s, triggering rolling restart...",
+		log.Printf("[Image Poller] Service %s (mode: %s) uses updated image %s:%s, triggering rolling restart...",
 			svc.Name, svc.Mode, repo, tag)
 
 		if err := p.restartServiceWithImage(ctx, svc, repo, tag, auth); err != nil {
-			log.Printf("ImagePoller: Failed rolling update for service %s: %v", svc.Name, err)
+			log.Printf("[Image Poller] Failed rolling update for service %s: %v", svc.Name, err)
 			continue
 		}
 
@@ -457,7 +457,7 @@ func (p *ImagePoller) restartServiceWithImage(ctx context.Context, svc api.Servi
 
 	_, updateErr := p.docker.ServiceUpdate(ctx, svc.ID, service.Version, service.Spec, opts)
 	if updateErr == nil {
-		log.Printf("ImagePoller: Successfully restarted service %s to use updated image %s", svc.Name, targetImage)
+		log.Printf("[Image Poller] Successfully restarted service %s to use updated image %s", svc.Name, targetImage)
 		return nil
 	}
 
@@ -478,7 +478,7 @@ func (p *ImagePoller) restartServiceWithImage(ctx context.Context, svc api.Servi
 		return fmt.Errorf("service update failed (registry: %v, fallback: %w)", updateErr, retryErr)
 	}
 
-	log.Printf("ImagePoller: Successfully restarted service %s using local image %s", svc.Name, targetImage)
+	log.Printf("[Image Poller] Successfully restarted service %s using local image %s", svc.Name, targetImage)
 	return nil
 }
 
@@ -503,7 +503,7 @@ func (p *ImagePoller) recordDeploymentEvent(imageRef, arch, details string) {
 		time.Now(),
 	)
 	if err != nil {
-		log.Printf("ImagePoller: Failed to save deployment audit event: %v", err)
+		log.Printf("[Image Poller] Failed to save deployment audit event: %v", err)
 	}
 }
 
