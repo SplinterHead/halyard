@@ -101,9 +101,13 @@ const routes = [
   },
 
   {
+    path: "/settings",
+    name: "settings",
+    component: () => import("../views/settings/SettingsView.vue"),
+  },
+  {
     path: "/settings/git",
-    name: "settings-git",
-    component: () => import("../views/settings/SettingsGitView.vue"),
+    redirect: "/settings",
   },
 
   {
