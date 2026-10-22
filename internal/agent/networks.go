@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sync"
 
 	"github.com/docker/docker/api/types"
 	"github.com/SplinterHead/halyard/api"
@@ -22,31 +23,47 @@ func (m *NetworkManager) ListNetworks(ctx context.Context) ([]api.NetworkInfo, e
 		return nil, err
 	}
 
-	networks := make([]api.NetworkInfo, 0, len(resp))
-	for _, n := range resp {
-		stack := n.Labels["com.docker.stack.namespace"]
-		if stack == "" {
-			stack = "-"
-		}
+	networks := make([]api.NetworkInfo, len(resp))
+	var wg sync.WaitGroup
+	for i, n := range resp {
+		wg.Add(1)
+		go func(idx int, netResource types.NetworkResource) {
+			defer wg.Done()
+			stack := netResource.Labels["com.docker.stack.namespace"]
+			if stack == "" {
+				stack = "-"
+			}
 
-		subnet := ""
-		gateway := ""
-		if len(n.IPAM.Config) > 0 {
-			subnet = n.IPAM.Config[0].Subnet
-			gateway = n.IPAM.Config[0].Gateway
-		}
+			subnet := ""
+			if len(netResource.IPAM.Config) > 0 {
+				subnet = netResource.IPAM.Config[0].Subnet
+			}
 
-		networks = append(networks, api.NetworkInfo{
-			ID:        n.ID,
-			Name:      n.Name,
-			Driver:    n.Driver,
-			Scope:     n.Scope,
-			Subnet:    subnet,
-			Gateway:   gateway,
-			Stack:     stack,
-			CreatedAt: n.Created,
-		})
+			nw, err := m.docker.NetworkInspect(ctx, netResource.ID, types.NetworkInspectOptions{Verbose: true})
+			if err != nil {
+				nw, _ = m.docker.NetworkInspect(ctx, netResource.ID, types.NetworkInspectOptions{Verbose: false})
+			}
+
+			usedIPs, totalIPs := docker.CalculateNetworkIPUsage(nw)
+			if subnet == "" && len(nw.IPAM.Config) > 0 {
+				subnet = nw.IPAM.Config[0].Subnet
+			}
+
+			networks[idx] = api.NetworkInfo{
+				ID:         netResource.ID,
+				Name:       netResource.Name,
+				Scope:      netResource.Scope,
+				Subnet:     subnet,
+				Stack:      stack,
+				CreatedAt:  netResource.Created,
+				Internal:   netResource.Internal,
+				Attachable: netResource.Attachable,
+				UsedIPs:    usedIPs,
+				TotalIPs:   totalIPs,
+			}
+		}(i, n)
 	}
+	wg.Wait()
 
 	return networks, nil
 }
@@ -61,18 +78,34 @@ func (m *NetworkManager) GetNetworkDetail(ctx context.Context, id string) (api.N
 		}
 	}
 
+	stack := nw.Labels["com.docker.stack.namespace"]
+	if stack == "" {
+		stack = "-"
+	}
+
+	subnet := ""
+	if len(nw.IPAM.Config) > 0 {
+		subnet = nw.IPAM.Config[0].Subnet
+	}
+
+	usedIPs, totalIPs := docker.CalculateNetworkIPUsage(nw)
+
 	detail := api.NetworkDetail{
 		NetworkInfo: api.NetworkInfo{
-			ID:        nw.ID,
-			Name:      nw.Name,
-			Driver:    nw.Driver,
-			Scope:     nw.Scope,
-			CreatedAt: nw.Created,
+			ID:         nw.ID,
+			Name:       nw.Name,
+			Scope:      nw.Scope,
+			Subnet:     subnet,
+			Stack:      stack,
+			CreatedAt:  nw.Created,
+			Internal:   nw.Internal,
+			Attachable: nw.Attachable,
+			UsedIPs:    usedIPs,
+			TotalIPs:   totalIPs,
 		},
+		Driver:     nw.Driver,
 		Options:    nw.Options,
 		Labels:     nw.Labels,
-		Internal:   nw.Internal,
-		Attachable: nw.Attachable,
 		Ingress:    nw.Ingress,
 	}
 

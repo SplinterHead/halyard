@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -218,3 +220,50 @@ func (c *Client) StreamHostCommand(ctx context.Context, command string) (io.Read
 
 	return pr, nil
 }
+
+// CalculateNetworkIPUsage computes used and total IP addresses for a Docker network resource
+func CalculateNetworkIPUsage(nw types.NetworkResource) (int, int) {
+	usedIPs := make(map[string]struct{})
+
+	for _, c := range nw.Containers {
+		if c.IPv4Address != "" {
+			ip := strings.Split(c.IPv4Address, "/")[0]
+			if ip != "" {
+				usedIPs[ip] = struct{}{}
+			}
+		}
+		if c.IPv6Address != "" {
+			ip := strings.Split(c.IPv6Address, "/")[0]
+			if ip != "" {
+				usedIPs[ip] = struct{}{}
+			}
+		}
+	}
+
+	for _, svc := range nw.Services {
+		if svc.VIP != "" {
+			usedIPs[svc.VIP] = struct{}{}
+		}
+		for _, task := range svc.Tasks {
+			if task.EndpointIP != "" {
+				usedIPs[task.EndpointIP] = struct{}{}
+			}
+		}
+	}
+
+	totalIPs := 0
+	for _, cfg := range nw.IPAM.Config {
+		if cfg.Subnet != "" {
+			_, ipNet, err := net.ParseCIDR(cfg.Subnet)
+			if err == nil {
+				ones, bits := ipNet.Mask.Size()
+				if bits == 32 && ones >= 0 && ones <= 32 {
+					totalIPs += 1 << (32 - ones)
+				}
+			}
+		}
+	}
+
+	return len(usedIPs), totalIPs
+}
+

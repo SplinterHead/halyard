@@ -164,49 +164,76 @@
           </v-dialog>
     </template>
     <template v-slot:item.name="{ item }">
-              <div class="d-flex flex-column">
-                <span class="text-body-2 font-weight-bold">{{ item.name }}</span>
-                <span class="text-caption text-grey">{{ item.stack === '-' ? 'System' : item.stack }}</span>
-              </div>
-            </template>
+      <div class="d-flex flex-column">
+        <span class="text-body-2 font-weight-bold">{{ item.name }}</span>
+        <span class="text-caption text-grey">{{ item.stack === '-' ? 'System' : item.stack }}</span>
+      </div>
+    </template>
 
+    <template v-slot:item.internal="{ value }">
+      <v-chip
+        size="x-small"
+        :color="value ? 'success' : 'grey'"
+        variant="tonal"
+        label
+      >
+        {{ value ? 'Yes' : 'No' }}
+      </v-chip>
+    </template>
 
-            <template v-slot:item.driver="{ value }">
-              <div class="text-center">
-                <v-chip size="x-small" variant="tonal" color="secondary" label>
-                  {{ value }}
-                </v-chip>
-              </div>
-            </template>
+    <template v-slot:item.attachable="{ value }">
+      <v-chip
+        size="x-small"
+        :color="value ? 'success' : 'grey'"
+        variant="tonal"
+        label
+      >
+        {{ value ? 'Yes' : 'No' }}
+      </v-chip>
+    </template>
 
-            <template v-slot:item.node="{ value }">
-              <code class="text-caption" v-if="value !== 'Swarm'">{{ value }}</code>
-              <span v-else class="text-caption text-grey">Swarm</span>
-            </template>
+    <template v-slot:item.subnet="{ value }">
+      <code class="font-mono text-caption" v-if="value">{{ value }}</code>
+      <span v-else class="text-caption text-grey-lighten-1">-</span>
+    </template>
 
-            <template v-slot:item.subnet="{ value }">
-              <code class="font-mono text-caption" v-if="value">{{ value }}</code>
-              <span v-else class="text-caption text-grey-lighten-1">-</span>
-            </template>
+    <template v-slot:item.ip_usage="{ item }">
+      <div v-if="item.total_ips > 0" class="d-flex flex-column" style="width: 150px">
+        <div class="d-flex justify-space-between align-center mb-1">
+          <span class="text-caption font-mono text-grey-lighten-1">
+            {{ item.used_ips }} / {{ item.total_ips }}
+          </span>
+          <span class="text-caption font-mono text-grey" style="font-size: 0.75rem">
+            {{ Math.round((item.used_ips / item.total_ips) * 100) }}%
+          </span>
+        </div>
+        <v-progress-linear
+          :model-value="(item.used_ips / item.total_ips) * 100"
+          :color="getIpUsageColor(item.used_ips, item.total_ips)"
+          height="4"
+          rounded
+        ></v-progress-linear>
+      </div>
+      <span v-else class="text-caption text-grey-lighten-1">-</span>
+    </template>
 
-            <template v-slot:item.gateway="{ value }">
-              <code class="font-mono text-caption" v-if="value">{{ value }}</code>
-              <span v-else class="text-caption text-grey-lighten-1">-</span>
-            </template>
+    <template v-slot:item.created_at="{ value }">
+      <div class="text-end">
+        <RelativeTime :value="value" />
+      </div>
+    </template>
 
-            <template v-slot:item.created_at="{ value }">
-              <RelativeTime :value="value" />
-            </template>
-
-            <template v-slot:item.actions="{ item }">
-              <v-btn
-                icon="mdi-delete-outline"
-                size="x-small"
-                variant="text"
-                color="error"
-                @click.stop="confirmDelete(item)"
-              ></v-btn>
-            </template>
+    <template v-slot:item.actions="{ item }">
+      <div class="d-flex justify-center">
+        <v-btn
+          icon="mdi-delete-outline"
+          size="x-small"
+          variant="text"
+          color="error"
+          @click.stop="confirmDelete(item)"
+        ></v-btn>
+      </div>
+    </template>
   </DataTablePage>
 </template>
 
@@ -221,13 +248,14 @@ const searchQuery = ref('')
 interface Network {
   id: string
   name: string
-  node: string
-  driver: string
   scope: string
   subnet: string
-  gateway: string
   stack: string
   created_at: string
+  internal: boolean
+  attachable: boolean
+  used_ips: number
+  total_ips: number
 }
 
 const networks = ref<Network[]>([])
@@ -254,6 +282,14 @@ const getRowProps = ({ item }: any) => {
   };
 };
 
+const getIpUsageColor = (used: number, total: number) => {
+  if (!total) return 'primary'
+  const pct = (used / total) * 100
+  if (pct >= 90) return 'error'
+  if (pct >= 75) return 'warning'
+  return 'primary'
+}
+
 const headers = [
   {
     title: "Network / Stack",
@@ -261,11 +297,36 @@ const headers = [
     sortable: true,
     align: "start" as const,
   },
-  { title: "Driver", key: "driver", width: "100px", align: "center" as const },
-  { title: "Subnet", key: "subnet", align: "start" as const },
-  { title: "Gateway", key: "gateway", align: "start" as const },
-  { title: "Node", key: "node", width: "150px", align: "start" as const },
-  { title: "Created", key: "created_at", align: "start" as const },
+  {
+    title: "Internal",
+    key: "internal",
+    width: "110px",
+    align: "start" as const,
+  },
+  {
+    title: "Attachable",
+    key: "attachable",
+    width: "110px",
+    align: "start" as const,
+  },
+  {
+    title: "Subnet",
+    key: "subnet",
+    align: "start" as const,
+  },
+  {
+    title: "Ip Usage",
+    key: "ip_usage",
+    width: "180px",
+    align: "start" as const,
+    value: (item: Network) => item.total_ips > 0 ? (item.used_ips / item.total_ips) : 0,
+  },
+  {
+    title: "Created",
+    key: "created_at",
+    width: "140px",
+    align: "end" as const,
+  },
   {
     title: "Actions",
     key: "actions",

@@ -71,25 +71,25 @@ type VolumeInfo struct {
 
 // NetworkInfo represents a Docker network's metadata
 type NetworkInfo struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Node      string    `json:"node"`
-	Driver    string    `json:"driver"`
-	Scope     string    `json:"scope"`
-	Subnet    string    `json:"subnet"`
-	Gateway   string    `json:"gateway"`
-	Stack     string    `json:"stack"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Scope      string    `json:"scope"`
+	Subnet     string    `json:"subnet"`
+	Stack      string    `json:"stack"`
+	CreatedAt  time.Time `json:"created_at"`
+	Internal   bool      `json:"internal"`
+	Attachable bool      `json:"attachable"`
+	UsedIPs    int       `json:"used_ips"`
+	TotalIPs   int       `json:"total_ips"`
 }
 
 type NetworkDetail struct {
 	NetworkInfo
+	Driver     string             `json:"driver"`
 	Containers []NetworkContainer `json:"containers"`
 	IPAMConfig []IPAMConfig       `json:"ipam_configs"`
 	Options    map[string]string  `json:"options"`
 	Labels     map[string]string  `json:"labels"`
-	Internal   bool               `json:"internal"`
-	Attachable bool               `json:"attachable"`
 	Ingress    bool               `json:"ingress"`
 }
 

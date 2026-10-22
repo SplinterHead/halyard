@@ -31,27 +31,25 @@
             </template>
 
             <template v-slot:item.up_to_date="{ item }">
-              <div class="text-center">
-                <v-chip
-                  v-if="!item.up_to_date"
-                  color="warning"
-                  size="x-small"
-                  label
-                  class="text-uppercase font-weight-bold"
-                >
-                  Out of Date
-                </v-chip>
-                <v-chip
-                  v-else
-                  color="success"
-                  variant="tonal"
-                  size="x-small"
-                  label
-                  class="text-uppercase font-weight-bold"
-                >
-                  Current
-                </v-chip>
-              </div>
+              <v-chip
+                v-if="!item.up_to_date"
+                color="warning"
+                size="x-small"
+                label
+                class="text-uppercase font-weight-bold"
+              >
+                Out of Date
+              </v-chip>
+              <v-chip
+                v-else
+                color="success"
+                variant="tonal"
+                size="x-small"
+                label
+                class="text-uppercase font-weight-bold"
+              >
+                Current
+              </v-chip>
             </template>
 
             <template v-slot:item.service="{ item }">
@@ -72,7 +70,9 @@
             </template>
 
             <template v-slot:item.created_at="{ value }">
-              <RelativeTime :value="value" />
+              <div class="text-end">
+                <RelativeTime :value="value" />
+              </div>
             </template>
   </DataTablePage>
 </template>
@@ -126,7 +126,7 @@ const headers = [
     title: "Update",
     key: "up_to_date",
     width: "120px",
-    align: "center" as const,
+    align: "start" as const,
   },
   {
     title: "Service / Stack",
@@ -136,7 +136,7 @@ const headers = [
   },
   { title: "Status", key: "status", align: "start" as const },
   { title: "Node", key: "node", width: "150px", align: "start" as const },
-  { title: "Created", key: "created_at", align: "start" as const },
+  { title: "Created", key: "created_at", align: "end" as const },
 ];
 
 const getStateColor = (state: string) => {

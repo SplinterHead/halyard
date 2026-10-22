@@ -93,7 +93,9 @@
             </template>
 
             <template v-slot:item.created_at="{ value }">
-              <RelativeTime :value="value" />
+              <div class="text-end">
+                <RelativeTime :value="value" />
+              </div>
             </template>
 
             <template v-slot:item.actions="{ item }">
@@ -140,7 +142,7 @@ const newSecret = ref({
 const headers = [
   { title: 'Name', key: 'name', sortable: true, align: 'start' as const },
   { title: 'ID', key: 'id', width: '150px', align: 'start' as const },
-  { title: 'Created', key: 'created_at', align: 'start' as const },
+  { title: 'Created', key: 'created_at', align: 'end' as const },
   { title: 'Actions', key: 'actions', width: '100px', align: 'center' as const, sortable: false },
 ]
 

@@ -207,6 +207,9 @@
                   {{ item.state }}
                 </v-chip>
               </template>
+              <template v-slot:item.desired_state="{ value }">
+                <span class="text-caption text-uppercase font-weight-bold text-grey">{{ value }}</span>
+              </template>
               <template v-slot:item.node_name="{ value }">
                 <code class="text-caption">{{ value || 'Unknown' }}</code>
               </template>
@@ -215,7 +218,9 @@
                 <span class="text-caption text-grey" v-else>-</span>
               </template>
               <template v-slot:item.updated_at="{ value }">
-                <RelativeTime :value="value" />
+                <div class="text-end">
+                  <RelativeTime :value="value" />
+                </div>
               </template>
             </v-data-table>
           </v-card-text>
@@ -275,8 +280,8 @@ const deleteVolumes = ref(false);
 const taskHeaders = [
   { title: "Service", key: "service_name", align: "start" as const },
   { title: "Node", key: "node_name", align: "start" as const },
-  { title: "State", key: "state", align: "center" as const },
-  { title: "Desired", key: "desired_state", align: "center" as const },
+  { title: "State", key: "state", align: "start" as const },
+  { title: "Desired", key: "desired_state", align: "start" as const },
   { title: "Error / Status", key: "error", align: "start" as const },
   { title: "Updated", key: "updated_at", align: "end" as const },
 ];

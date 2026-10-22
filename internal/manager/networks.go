@@ -31,41 +31,74 @@ func NewNetworkAggregator(cli *docker.Client, agentDir *AgentDirectory) *Network
 }
 
 func (m *NetworkAggregator) ListAllNetworks(ctx context.Context) ([]api.NetworkInfo, error) {
-	// Get nodes to know hostnames
-	nodes, err := m.docker.NodeList(ctx, types.NodeListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	nodeMap := make(map[string]string)
-	for _, n := range nodes {
-		nodeMap[n.ID] = n.Description.Hostname
-	}
-
 	activeAgents := m.agentDir.GetAllAgents()
+	allNets := GatherFromAgents[api.NetworkInfo](m.client, "/networks", activeAgents, nil)
 
-	mutator := func(item *api.NetworkInfo, nodeID string) {
-		item.Node = nodeMap[nodeID] // store raw node name for map logic
+	// If no agents are active, fallback to local docker daemon
+	if len(allNets) == 0 && m.docker != nil {
+		localNets, err := m.docker.NetworkList(ctx, types.NetworkListOptions{})
+		if err == nil {
+			for _, n := range localNets {
+				stack := n.Labels["com.docker.stack.namespace"]
+				if stack == "" {
+					stack = "-"
+				}
+				subnet := ""
+				if len(n.IPAM.Config) > 0 {
+					subnet = n.IPAM.Config[0].Subnet
+				}
+				nw, err := m.docker.NetworkInspect(ctx, n.ID, types.NetworkInspectOptions{Verbose: true})
+				if err != nil {
+					nw, _ = m.docker.NetworkInspect(ctx, n.ID, types.NetworkInspectOptions{Verbose: false})
+				}
+				usedIPs, totalIPs := docker.CalculateNetworkIPUsage(nw)
+				if subnet == "" && len(nw.IPAM.Config) > 0 {
+					subnet = nw.IPAM.Config[0].Subnet
+				}
+				allNets = append(allNets, api.NetworkInfo{
+					ID:         n.ID,
+					Name:       n.Name,
+					Scope:      n.Scope,
+					Subnet:     subnet,
+					Stack:      stack,
+					CreatedAt:  n.Created,
+					Internal:   n.Internal,
+					Attachable: n.Attachable,
+					UsedIPs:    usedIPs,
+					TotalIPs:   totalIPs,
+				})
+			}
+		}
 	}
-	allNets := GatherFromAgents[api.NetworkInfo](m.client, "/networks", activeAgents, mutator)
 
 	networkMap := make(map[string]api.NetworkInfo)
 	for _, n := range allNets {
 		key := n.Name
 		existing, exists := networkMap[key]
 		if !exists {
-			if n.Scope == "swarm" {
-				n.Node = "Swarm"
-			}
 			networkMap[key] = n
 		} else {
 			if n.Scope == "swarm" && existing.Scope != "swarm" {
-				n.Node = "Swarm"
 				networkMap[key] = n
-			} else if n.Scope != "swarm" && existing.Scope != "swarm" {
-				if existing.Node != n.Node && existing.Node != "Multi-Node" {
-					existing.Node = "Multi-Node"
-					networkMap[key] = existing
+			} else if n.UsedIPs > existing.UsedIPs {
+				networkMap[key] = n
+			}
+		}
+	}
+
+	// For Swarm-scoped networks, inspect on manager if available to ensure full cluster IPAM visibility
+	for key, n := range networkMap {
+		if n.Scope == "swarm" && m.docker != nil {
+			nw, err := m.docker.NetworkInspect(ctx, n.ID, types.NetworkInspectOptions{Verbose: true})
+			if err == nil {
+				used, total := docker.CalculateNetworkIPUsage(nw)
+				if used > n.UsedIPs {
+					n.UsedIPs = used
 				}
+				if total > 0 {
+					n.TotalIPs = total
+				}
+				networkMap[key] = n
 			}
 		}
 	}
@@ -173,24 +206,35 @@ func (m *NetworkAggregator) GetNetworkDetail(ctx context.Context, id string) (ap
 }
 
 func (m *NetworkAggregator) formatDetail(nw types.NetworkResource) api.NetworkDetail {
-	detail := api.NetworkDetail{
-		NetworkInfo: api.NetworkInfo{
-			ID:        nw.ID,
-			Name:      nw.Name,
-			Driver:    nw.Driver,
-			Scope:     nw.Scope,
-			CreatedAt: nw.Created,
-			Node:      "Swarm", // Since we inspected it on the manager, it's Swarm scope or manager-local
-		},
-		Options:    nw.Options,
-		Labels:     nw.Labels,
-		Internal:   nw.Internal,
-		Attachable: nw.Attachable,
-		Ingress:    nw.Ingress,
+	stack := nw.Labels["com.docker.stack.namespace"]
+	if stack == "" {
+		stack = "-"
 	}
 
-	if nw.Scope != "swarm" {
-		detail.Node = "Manager"
+	subnet := ""
+	if len(nw.IPAM.Config) > 0 {
+		subnet = nw.IPAM.Config[0].Subnet
+	}
+
+	usedIPs, totalIPs := docker.CalculateNetworkIPUsage(nw)
+
+	detail := api.NetworkDetail{
+		NetworkInfo: api.NetworkInfo{
+			ID:         nw.ID,
+			Name:       nw.Name,
+			Scope:      nw.Scope,
+			Subnet:     subnet,
+			Stack:      stack,
+			CreatedAt:  nw.Created,
+			Internal:   nw.Internal,
+			Attachable: nw.Attachable,
+			UsedIPs:    usedIPs,
+			TotalIPs:   totalIPs,
+		},
+		Driver:  nw.Driver,
+		Options: nw.Options,
+		Labels:  nw.Labels,
+		Ingress: nw.Ingress,
 	}
 
 	for _, cfg := range nw.IPAM.Config {

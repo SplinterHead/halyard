@@ -85,39 +85,33 @@
             </template>
 
             <template v-slot:item.stack="{ value }">
-              <div class="text-start">
-                <v-chip v-if="value !== '-'" size="x-small" variant="tonal" color="primary" label>
-                  {{ value }}
-                </v-chip>
-                <span v-else class="text-caption text-grey-lighten-1">-</span>
-              </div>
+              <v-chip v-if="value !== '-'" size="x-small" variant="tonal" color="primary" label>
+                {{ value }}
+              </v-chip>
+              <span v-else class="text-caption text-grey-lighten-1">-</span>
             </template>
 
 
             <template v-slot:item.driver="{ value }">
-              <div class="text-center">
-                <v-chip
-                  :color="getDriverColor(value)"
-                  size="x-small"
-                  label
-                  class="text-uppercase font-weight-bold"
-                >
-                  {{ value }}
-                </v-chip>
-              </div>
+              <v-chip
+                :color="getDriverColor(value)"
+                size="x-small"
+                label
+                class="text-uppercase font-weight-bold"
+              >
+                {{ value }}
+              </v-chip>
             </template>
 
             <template v-slot:item.type="{ value }">
-              <div class="text-center">
-                <v-chip
-                  :color="getTypeColor(value)"
-                  size="x-small"
-                  label
-                  class="text-uppercase font-weight-bold"
-                >
-                  {{ value }}
-                </v-chip>
-              </div>
+              <v-chip
+                :color="getTypeColor(value)"
+                size="x-small"
+                label
+                class="text-uppercase font-weight-bold"
+              >
+                {{ value }}
+              </v-chip>
             </template>
 
             <template v-slot:item.node="{ value }">
@@ -125,7 +119,9 @@
             </template>
 
             <template v-slot:item.created_at="{ value }">
-              <RelativeTime :value="value" />
+              <div class="text-end">
+                <RelativeTime :value="value" />
+              </div>
             </template>
 
             <template v-slot:item.actions="{ item }">
@@ -207,13 +203,13 @@ const headers = [
     width: "150px",
     align: "start" as const,
   },
-  { title: "Driver", key: "driver", width: "150px", align: "center" as const },
-  { title: "Type", key: "type", width: "150px", align: "center" as const },
+  { title: "Driver", key: "driver", width: "150px", align: "start" as const },
+  { title: "Type", key: "type", width: "150px", align: "start" as const },
   {
     title: "Created",
     key: "created_at",
     width: "150px",
-    align: "start" as const,
+    align: "end" as const,
   },
   {
     title: "Actions",

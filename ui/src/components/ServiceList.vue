@@ -60,7 +60,7 @@
         </template>
 
         <template v-slot:item.replicas="{ item }">
-          <div class="d-flex align-center" style="min-width: 120px">
+          <div class="d-flex align-center">
             <v-chip
               :color="item.running < item.replicas ? 'warning' : 'success'"
               size="x-small"
@@ -110,7 +110,9 @@
         </template>
 
         <template v-slot:item.updated_at="{ value }">
-          <RelativeTime :value="value" />
+          <div class="text-end">
+            <RelativeTime :value="value" />
+          </div>
         </template>
 
         <template v-slot:item.actions="{ item }">
@@ -236,7 +238,7 @@ const headers = [
     title: "Updated",
     key: "updated_at",
     width: "200px",
-    align: "start" as const,
+    align: "end" as const,
   },
   {
     title: "Actions",

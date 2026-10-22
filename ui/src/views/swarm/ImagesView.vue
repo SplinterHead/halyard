@@ -117,7 +117,9 @@
 
             <!-- Size Column -->
             <template v-slot:item.size="{ value }">
-              <span class="text-body-2">{{ formatSize(value) }}</span>
+              <div class="text-end">
+                <span class="text-body-2">{{ formatSize(value) }}</span>
+              </div>
             </template>
 
             <!-- In Use Column -->
@@ -183,10 +185,10 @@ const forceDelete = ref(false)
 const headers = [
   { title: 'Image Name', key: 'repository', sortable: true, align: 'start' as const },
   { title: 'SHA', key: 'id', width: '150px', sortable: true, align: 'start' as const },
-  { title: 'Architecture', key: 'architecture', width: '130px', align: 'center' as const },
+  { title: 'Architecture', key: 'architecture', width: '130px', align: 'start' as const },
   { title: 'Node', key: 'node', sortable: true, align: 'start' as const },
   { title: 'Size', key: 'size', width: '120px', sortable: true, align: 'end' as const },
-  { title: 'Status', key: 'in_use', width: '120px', sortable: true, align: 'center' as const },
+  { title: 'Status', key: 'in_use', width: '120px', sortable: true, align: 'start' as const },
   { title: 'Actions', key: 'actions', width: '120px', align: 'center' as const, sortable: false },
 ]
 

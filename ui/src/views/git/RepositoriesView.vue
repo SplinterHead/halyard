@@ -72,7 +72,9 @@
         </template>
 
         <template v-slot:item.created_at="{ value }">
-          <RelativeTime :value="value" />
+          <div class="text-end">
+            <RelativeTime :value="value" />
+          </div>
         </template>
 
         <template v-slot:item.actions="{ item }">
@@ -273,7 +275,7 @@ const getRowProps = ({ item }: any) => {
 const headers = [
   { title: "Repository", key: "name", sortable: true, align: "start" as const },
   { title: "URL", key: "url", sortable: true, align: "start" as const },
-  { title: "Created", key: "created_at", width: "200px", align: "start" as const },
+  { title: "Created", key: "created_at", width: "200px", align: "end" as const },
   { title: "Actions", key: "actions", width: "120px", align: "center" as const, sortable: false },
 ];
 

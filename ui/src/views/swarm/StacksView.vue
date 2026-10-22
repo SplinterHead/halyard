@@ -53,7 +53,9 @@
             </template>
 
             <template v-slot:item.updated_at="{ value }">
-              <RelativeTime :value="value" />
+              <div class="text-end">
+                <RelativeTime :value="value" />
+              </div>
             </template>
 
             <template v-slot:item.actions="{ item }">
@@ -129,7 +131,7 @@ const headers = [
     width: "150px",
     align: "start" as const,
   },
-  { title: "Updated", key: "updated_at", width: "150px", align: "start" as const },
+  { title: "Updated", key: "updated_at", width: "150px", align: "end" as const },
   {
     title: "Actions",
     key: "actions",

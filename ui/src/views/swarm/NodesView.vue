@@ -123,7 +123,7 @@
             </template>
 
             <template v-slot:item.role="{ value }">
-              <div class="text-center text-caption text-uppercase font-weight-bold" :class="value === 'manager' ? 'text-primary' : 'text-grey'">
+              <div class="text-caption text-uppercase font-weight-bold" :class="value === 'manager' ? 'text-primary' : 'text-grey'">
                 {{ value }}
               </div>
             </template>
@@ -164,7 +164,9 @@
             </template>
 
             <template v-slot:item.uptime="{ value }">
-              <span class="text-caption">{{ formatUptime(value) }}</span>
+              <div class="text-end">
+                <span class="text-caption">{{ formatUptime(value) }}</span>
+              </div>
             </template>
   </DataTablePage>
 </template>
@@ -250,12 +252,12 @@ const getRowProps = ({ item }: any) => {
 const headers = [
   { title: "Hostname", key: "hostname", sortable: true, align: "start" as const },
   { title: "", key: "alerts", sortable: false, align: "end" as const, width: "60px" },
-  { title: "Role", key: "role", width: "100px", align: "center" as const },
+  { title: "Role", key: "role", width: "100px", align: "start" as const },
   { title: 'IP', key: 'ip', align: 'start' as const },
   { title: 'CPU', key: 'cpu_usage', align: 'start' as const },
   { title: 'Memory', key: 'memory_usage', align: 'start' as const },
   { title: 'Engine', key: 'version', align: 'start' as const },
-  { title: 'Uptime', key: 'uptime', align: 'start' as const },
+  { title: 'Uptime', key: 'uptime', align: 'end' as const },
 ]
 
 const fetchNodes = async () => {

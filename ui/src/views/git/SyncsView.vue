@@ -120,13 +120,17 @@
           </v-chip>
         </template>
 
-        <template v-slot:item.last_sync_at="{ value }">
-          <RelativeTime :value="value" v-if="value && value !== '0001-01-01T00:00:00Z'" />
-          <span v-else class="text-caption text-grey">Never</span>
+        <template v-slot:item.created_at="{ value }">
+          <div class="text-end">
+            <RelativeTime :value="value" />
+          </div>
         </template>
 
-        <template v-slot:item.created_at="{ value }">
-          <RelativeTime :value="value" />
+        <template v-slot:item.last_sync_at="{ value }">
+          <div class="text-end">
+            <RelativeTime :value="value" v-if="value && value !== '0001-01-01T00:00:00Z'" />
+            <span v-else class="text-caption text-grey">Never</span>
+          </div>
         </template>
 
         <template v-slot:item.actions="{ item }">
@@ -510,25 +514,25 @@ const headers = [
     title: "Pull Files",
     key: "pull_additional_files",
     width: "120px",
-    align: "center" as const,
+    align: "start" as const,
   },
   {
     title: "Auto Sync",
     key: "auto_sync",
     width: "120px",
-    align: "center" as const,
+    align: "start" as const,
   },
   {
     title: "Created",
     key: "created_at",
     width: "200px",
-    align: "start" as const,
+    align: "end" as const,
   },
   {
     title: "Updated",
     key: "last_sync_at",
     width: "150px",
-    align: "start" as const,
+    align: "end" as const,
   },
   {
     title: "Actions",

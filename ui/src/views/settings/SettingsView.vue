@@ -12,7 +12,7 @@
     <v-divider class="my-4"></v-divider>
 
     <div class="pa-4 flex-grow-1 overflow-y-auto">
-      <div class="d-flex flex-column gap-6 max-width-900">
+      <div class="settings-content mx-auto d-flex flex-column gap-6">
         <!-- GitOps Settings Card -->
         <v-card border flat class="bg-surface rounded-lg">
           <v-card-text class="pa-6">
@@ -322,8 +322,9 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.max-width-900 {
-  max-width: 900px;
+.settings-content {
+  max-width: 860px;
+  width: 100%;
 }
 .gap-2 {
   gap: 8px;
