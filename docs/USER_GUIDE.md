@@ -1,214 +1,233 @@
 # Halyard Platform User Guide
 
-Welcome to the Halyard User Guide! This manual provides detailed instructions on how to navigate, monitor, and manage your Docker Swarm clusters using the Halyard visual control plane.
-
-Whether you are configuring GitOps auto-deployments, inspecting node resources, viewing live WebSocket log streams, or safely cleaning up unused Swarm volumes, this guide outlines the purpose and capabilities of every single page inside Halyard.
+Welcome to the Halyard User Guide! This manual explains how to navigate, monitor, and manage your Docker Swarm clusters using the Halyard visual control plane.
 
 ---
 
 ## 📌 Table of Contents
 1. [Dashboard (Home)](#1-dashboard-home)
-2. [Stacks & GitOps Deployments](#2-stacks-gitops-deployments)
-3. [Swarm Nodes](#3-swarm-nodes)
-4. [Services Management](#4-services-management)
-5. [Volumes & Node-Local Storage](#5-volumes-node-local-storage)
-6. [Containers & WebSocket Log Streaming](#6-containers-websocket-log-streaming)
-7. [Networks](#7-networks)
-8. [Docker Hub Registries & Pull Quotas](#8-docker-hub-registries-pull-quotas)
-9. [Secrets & Configs](#9-secrets--configs)
-10. [Git Repositories & Sync Mappings](#10-git-repositories--sync-mappings)
-11. [Event Audit Trail](#11-event-audit-trail)
+2. [Swarm Visualizer](#2-swarm-visualizer)
+3. [Stacks](#3-stacks)
+4. [Swarm Nodes & OS Updates](#4-swarm-nodes--os-updates)
+5. [Services Management](#5-services-management)
+6. [Containers, Live Logs & Interactive Terminal](#6-containers-live-logs--interactive-terminal)
+7. [Volumes, File Browser & Node-Local Storage](#7-volumes-file-browser--node-local-storage)
+8. [Node Images & Digest Checks](#8-node-images--digest-checks)
+9. [Networks & IP Usage](#9-networks--ip-usage)
+10. [Docker Registries & Pull Quotas](#10-docker-registries--pull-quotas)
+11. [Configs & Secrets](#11-configs--secrets)
+12. [Git Repositories & Sync Mappings](#12-git-repositories--sync-mappings)
+13. [System Settings, Themes & Automated Image Polling](#13-system-settings-themes--automated-image-polling)
+14. [User Profile & Log Colors](#14-user-profile--log-colors)
 
 ---
 
 ## 1. Dashboard (Home)
 
-The **Dashboard** serves as the central control room for your Docker Swarm cluster. It is optimized to give operators a high-level operational pulse at a single glance.
+The **Dashboard** (`/`) serves as the central control room for your Docker Swarm cluster.
 
 ### 📊 What You Can See
-* **Active Cluster Pulse**: High-level cluster health, node counts, and error trackers.
-* **Key Metrics (Real-time Gauges)**: Streamed live CPU and memory usage statistics aggregated across all online manager and worker nodes in the cluster.
-* **Swarm Stacks Overview**: A list of all deployed stacks, active service counts, replica health status, and raw size footprints.
-* **Nodes Roll**: Quick overview of online/offline Swarm nodes, IP addresses, system roles, and resource loads.
+* **Cluster Health Header**: Overall cluster status (`All cluster systems healthy` or `Cluster issues require attention`) plus node, stack, and active service totals.
+* **Summary Metric Cards**: Clickable KPI cards for **Nodes** (managers, workers, offline), **Stacks** (healthy vs. issues), **Replicas** (running vs. stopped), and **Cluster Memory / CPU** averages.
+* **Active Workloads**: Prioritized list of deployed stacks showing unhealthy stacks first, Git compose file paths, service names, running/total task counts, short Git commit SHAs, and update timestamps.
+* **Swarm Nodes Carousel**: Quick cards for connected nodes with live CPU %, RAM usage, and IP addresses (paginated in groups of 3).
+* **GitOps Synchronization Bar**: Cluster-wide summary of how many stacks are up to date with remote Git branches or have drift detected.
 
 ### ⚙️ Operator Actions
-* **Force Metrics Refresh**: Instantly query all agents to update live CPU and memory loads.
-* **Quick Navigation**: Click directly on any active node or stack to jump immediately into its deep inspection dashboard.
+* **Prune Swarm**: Open the cluster cleanup modal with toggle switches for **Unused Containers**, **Unused Networks**, **Dangling Images**, **All Unused Images (`-a`)**, and **Unused Volumes**.
+* **Refresh**: Re-query the manager and node agents for current cluster telemetry.
 
 ---
 
-## 2. Stacks & GitOps Deployments
+## 2. Swarm Visualizer
 
-The **Stacks** view lists all active Docker compose stacks running on the cluster. Halyard uses compose stack namespaces (`com.docker.stack.namespace`) to visually group related services together.
+The **Visualizer** (`/swarm/visualizer`) renders a live column-per-node topology of running and stopped containers across the Swarm.
 
 ### 📊 What You Can See
-* **Stack List**: Total number of services defined within the stack, overall replica health, and creation timestamps.
+* **Node Columns**: Node status, hostname, Manager/Worker badge, IP address, container count, and CPU/RAM utilization bars. Click any node header to open **Node Detail**.
+* **Container Tiles**: Stack label, container state dot, container name, image name, and an **Image update available** indicator when an image digest update is pending. Click any tile to open **Container Detail**.
+
+### ⚙️ Operator Actions
+* **Filter & Sort**: Filter in real time by search text, node role (**All Nodes**, **Managers**, **Workers**), container state (**All**, **Running**), and sort node columns by **Name** or **IP**.
+
+---
+
+## 3. Stacks
+
+The **Stacks** (`/swarm/stacks`) view groups orchestrated Docker Swarm services by `com.docker.stack.namespace`, with unstacked services grouped under `Orphaned/Manual`.
+
+### 📊 What You Can See
+* **Stack List**: Health status dot (`Healthy` green vs. degraded amber), total service count, and latest update timestamp.
 * **Stack Detail View (`/swarm/stacks/:name`)**:
-  * **Services Sub-List**: Scale or manage specific services belonging to this stack namespace.
-  * **Task Tracker**: Monitor active container tasks, including their individual host node locations and health.
-  * **Integrated Compose Viewer**: View the exact Git-reconciled YAML configuration file currently deployed to Swarm.
-  * **Configs & Secrets**: Lists all Docker secrets and config files injected into the stack.
+  * **Services**: Constituent services with images and `running / replicas` badges.
+  * **Volumes**: Referenced volumes marked **Managed** or **External**.
+  * **Containers**: Associated containers with host node, runtime status, and state badges.
+  * **Cluster Tasks**: Searchable, paginated task ledger (`25` items per page) tracking current **State**, **Desired** state, **Error / Status**, and **Updated** time.
 
 ### ⚙️ Operator Actions
-* **Force GitOps Reconciliation**: Click **Sync Now** inside stack details to force Halyard's GitOps engine to fetch the latest commits and redeploy the compose definition.
-* **Remove Stack**: Delete the entire stack namespace from the cluster (terminates all associated services and task containers immediately).
+* **Force Restart / Stop / Start / Rollback Spec**: Control stack services from the **Actions** menu on Stack Detail or restart directly from the Stacks table.
+* **Remove Stack**: Delete all services in the stack namespace, with an optional **Delete associated volumes** toggle switch to permanently delete stack volumes.
 
 ---
 
-## 3. Swarm Nodes
+## 4. Swarm Nodes & OS Updates
 
-The **Nodes** dashboard monitors the physical and virtual hardware hosting your containers. It manages node assignments, labels, and roles.
+The **Nodes** (`/swarm/nodes`) dashboard monitors physical and virtual cluster hosts via Halyard's global node agents.
 
 ### 📊 What You Can See
-* **Nodes list**: Monospaced lists of node hostnames, IP addresses, system architecture, OS versions, roles (Leader, Manager, Worker), and load percentages.
+* **Nodes Table**: Hostname, status dot, alert badges for pending OS package updates (`↓ N`) and pending restarts (`↻`), Swarm role, live CPU/Memory bars, IP, Docker Engine version, and Uptime.
 * **Node Detail View (`/swarm/nodes/:id`)**:
-  * **Uptime & Docker Engine Metadata**: Live system status details.
-  * **Apex time-series charts**: Interactive historical graphs representing CPU and memory trends over a rolling 24-hour window.
-  * **Active Task List**: Monitor all container replicas currently running on this specific node.
+  * **Alert Banners**: Notification banners for **Restart Required** and **Pending Package Updates**.
+  * **System Information**: OS, architecture, CPU cores, physical memory, Docker Engine version, and IP address.
+  * **Historical Performance (Last 24h)**: Interactive ApexCharts time-series graphs for CPU Usage (%) and Memory Usage (GB).
 
 ### ⚙️ Operator Actions
-* **Label Editor**: Docker Swarm uses custom node labels to coordinate container placement filters. Halyard provides a fully interactive node metadata panel to add, edit, or delete custom label keys and values instantly without shell access.
+* **+ Add Node**: Fetch live Swarm join tokens and copy `docker swarm join` commands for worker or manager nodes.
+* **Swarm Controls**: **Drain** or **Activate** node scheduling, **Promote** or **Demote** Swarm role, and **Reboot** (with **Reboot Immediately** or **Drain & Reboot**).
+* **Run System Updates**: Inspect pending `apt` packages in an `80vh` scrollable modal and stream live upgrade progress via Server-Sent Events (SSE), followed by an immediate rescan.
+* **Node Labels**: Add or remove custom Swarm placement labels directly from the UI.
 
 ---
 
-## 4. Services Management
+## 5. Services Management
 
-The **Services** view acts as a cluster-wide scale controller. Docker Swarm services run as replicated or global tasks across your hosts.
+The **Services** (`/swarm/services`) view lists all replicated and global Swarm services across the cluster.
 
 ### 📊 What You Can See
-* **Services Grid**: Lists active services, active image tags (cleaned of complex SHA hashes for readability), created/updated timestamps, and replicas counts (e.g. `3/3`).
+* **Services Table**: Status dot, service name, stack subtitle, scheduling mode icon (globe for `global`, grid for `replicated`) paired with the `running / replicas` badge, formatted image, published ports, and updated timestamp.
 * **Service Detail View (`/swarm/services/:id`)**:
-  * **Task Containers**: View individual task states and where they reside in the overlay topology.
-  * **Injected Environment Variables**: Review environmental configuration keys safely.
+  * **Runtime Configuration**: Split **Image** (`image:tag`) and **SHA** (`sha256:...`) fields, **Restart Policy**, and **Placement Constraints**.
+  * **Networking**: Published Swarm ingress/host ports.
+  * **Environment & Labels**: Aligned key/value tables of environment entries and labels.
 
 ### ⚙️ Operator Actions
-* **Scale Replica Counts**: Adjust active container counts up or down dynamically.
-* **Delete Service**: Safely remove a service from the cluster via standard confirmation dialogs.
+* **Lifecycle Menu (`Actions`)**: **Force Restart**, **Stop (Scale to 0)**, **Start Service**, **Rollback Spec**, **Scale Service** (replicated services only), and **Delete Service**.
 
 > [!WARNING]
 > Deleting a service terminates all running container tasks representing that service across every manager and worker node.
 
 ---
 
-## 5. Volumes & Node-Local Storage
+## 6. Containers, Live Logs & Interactive Terminal
 
-Halyard offers deep observability into storage mounts, which is notoriously difficult to retrieve globally in raw Docker Swarm setups.
+The **Containers** (`/swarm/containers`) view lists all active and exited containers discovered across Swarm nodes.
 
 ### 📊 What You Can See
-* **Unified Volume Inspector**: View local volumes across all nodes. Displays node location, host directory mount paths, volume driver (local, NFS, GlusterFS), and "In Use" status indicators.
+* **Containers Table**: State dot, container name, image, update badge (**Current** vs. **Out of Date**), Service/Stack, status string, node hostname, and creation time.
+* **Container Detail View (`/swarm/containers/:id`)**:
+  * **Overview Tab**: Service/Stack/Node/Created metadata, split **Image** and **SHA** fields, Networking (attached networks & exposed ports), Mounts table, Environment, and Labels.
+  * **Logs Tab**: Viewport-bounded WebSocket stdout/stderr log streamer with **Line Numbers** and **Timestamps** toggle switches, **Auto-scroll**, **Clear**, and customizable ANSI color rendering.
+  * **Terminal Tab**: Viewport-bounded interactive shell (`xterm.js`) over WebSocket with selectable shell (`/bin/bash`, `/bin/sh`, `/bin/zsh`, `/bin/ash`) and **Connect / Disconnect** control.
 
 ### ⚙️ Operator Actions
-* **Delete Volume**: Safely delete individual unused volumes. Clicking delete triggers a routed API query from the Manager to the specific host node's Agent to delete the local storage directory.
+* **Lifecycle Controls**: **Start**, **Stop**, **Restart**, and **Delete** (with a **Force delete** toggle switch to kill running containers).
+
+---
+
+## 7. Volumes, File Browser & Node-Local Storage
+
+Halyard routes queries through node agents to surface node-local volume metadata across the Swarm (`/swarm/volumes`).
+
+### 📊 What You Can See
+* **Unified Volume Inspector**: Volume name, **In Use** green dot indicator, host node, owning stack badge, driver (`local`, third-party drivers), detected mount type (`local`, `nfs`, `bind`, `gluster`), and creation timestamp.
+
+### ⚙️ Operator Actions
+* **Browse Volume Files**: Open the interactive **Volume Explorer** modal for any volume to traverse directories via breadcrumbs, filter filenames, and inspect file sizes, modification dates, and permissions.
+* **Delete Volume / Prune Unused**: Remove an individual unused volume on its host node or prune all unattached volumes cluster-wide.
 
 > [!IMPORTANT]
-> Volume deletion is destructive and permanent. To protect production workloads, Halyard checks if the volume is mounted to any active container and displays safety alerts, utilizing Docker Engine's lock safety checks.
+> Volume deletion is permanent. Docker Engine prevents deletion of volumes mounted by active containers unless those containers are removed first.
 
 ---
 
-## 6. Containers & WebSocket Log Streaming
+## 8. Node Images & Digest Checks
 
-The **Containers** view lists low-level docker tasks currently deployed across your cluster hosts.
+The **Images** (`/swarm/images`) view lists container images stored on every node in the cluster (deduplicated per node, repository, and tag).
 
 ### 📊 What You Can See
-* **Containers list**: Active task state (`running`, `exited`, `paused`), mapped internal IPs, and parent service relationships.
-* **Container Detail View (`/swarm/containers/:id`)**:
-  * **Live Websocket Log Streamer**: Streams stdout/stderr from the container directly into a high-performance terminal emulator inside the browser.
-  * **Resource Metrics**: Monitored live container resource consumption.
+* **Image Inventory**: Remote digest status dot (`Up to date`, `Out of date`, `Checking`, `Unchecked`), repository & tag, 12-char SHA, CPU architecture badge, host node, formatted size, and `In Use` / `Unused` status.
 
 ### ⚙️ Operator Actions
-* **Live Logging Controls**: Search log history, toggle autoscroll, and clear local logs cache instantly.
-* **Terminal Stream Access**: Pause or resume WebSocket connections dynamically to inspect traces without losing buffer history.
+* **Check All Updates**: Compare local image digests against remote registries using your configured registry credentials.
+* **Delete Image**: Remove a specific image tag from a node, with an optional **Force delete image** (`docker rmi -f`) toggle switch.
 
 ---
 
-## 7. Networks
+## 9. Networks & IP Usage
 
-The **Networks** page handles internal cluster overlay, bridge, and host networking.
+The **Networks** (`/swarm/networks`) page manages Swarm overlay, bridge, and host networks.
 
 ### 📊 What You Can See
-* **Networks Registry**: Lists active Docker networks, driver types (`overlay`, `bridge`, `macvlan`), network scope, and subnets.
-* **Network Detail View (`/swarm/networks/:id`)**:
-  * **Connected Containers**: View every task currently attached to this network overlay, along with allocated IP addresses.
+* **Networks Table**: Network name, owning stack (`System` for default/manual networks), **Internal** and **Attachable** flags, **Subnet**, live **IP Usage** meter (`used/total` + percentage bar), driver, scope, and creation time.
+* **Network Detail View (`/swarm/networks/:id`)**: **IPAM Configuration** (Subnet & Gateway), **Properties** (Internal, Attachable, Ingress), **Metadata** (Created At & Labels), and a searchable **Connected Containers** table showing IPv4/IPv6 addresses and clickable links to Container Detail.
 
 ### ⚙️ Operator Actions
-* **Orphan Cleanup**: Delete unused networks from nodes using confirmation dialogs.
+* **+ Create Network**: Create `overlay` or `bridge` networks with **Attachable**, **Internal**, optional CIDR **Subnet** & **Gateway**, and optional **Enable Encryption (IPSEC)** toggles.
+* **Delete Network**: Remove unused networks from the cluster.
 
 ---
 
-## 8. Docker Hub Registries & Pull Quotas
+## 10. Docker Registries & Pull Quotas
 
-Halyard tracks your Docker Hub container image download quotas to protect your cluster from unexpected pull failures.
+The **Docker Registries** (`/swarm/registries`) view manages registry credentials and tracks Docker Hub pull limits.
 
 ### 📊 What You Can See
-* **Linear Quota Gauges**: Real-time progress meters showing remaining anonymous or authenticated pull limits.
-* **Credentials Manager**: Connect private registries or input Docker Hub accounts.
-* **Anonymous Banner alert**: Proactive banner displaying public IP pull status with one-click buttons to quickly add registry credentials.
-
-### ⚙️ Operator Actions
-* **Force Quota Refresh**: Refresh limit headers from Docker Registry APIs.
-* **Configure Private Registries**: Safely register customized authentication endpoints.
+* **Anonymous Rate-Limit Banner**: Displays remaining anonymous Docker Hub pulls and reset time when no Docker Hub credential is saved, with an **Authenticate Docker Hub** quick action.
+* **Registry Cards**: Lists saved credentials with quick presets (`Docker Hub`, `GitHub Container Registry`, `GitLab Container Registry`, `AWS ECR`, `Google Artifact Registry`, `Google GCR`, `Red Hat Quay`, `Azure ACR`).
+* **Docker Hub Limit Meter**: Real-time progress bar on Docker Hub cards showing remaining pull quota, reset countdown, and manual refresh button.
 
 ---
 
-## 9. Secrets & Configs
+## 11. Configs & Secrets
 
-Securely manage sensitive keys and runtime configurations.
+Manage cluster-wide Docker Swarm configs (`/swarm/variables`) and secrets (`/swarm/secrets`).
 
-### 📊 What You Can See
-* **Credentials Ledger**: Lists all cluster-wide injected Swarm secrets and plain configs (`com.docker.swarm.config`).
-
-### ⚙️ Operator Actions
-* **Visual Secret Creator**: Input sensitive keys directly from the UI without echoing them into host shell history files.
-* **Secure Deletion**: Purge obsolete configs or keys.
+### 📊 What You Can See & Do
+* **Configs (Variables)**: List non-sensitive Swarm configs, create new configs, **click any row to inspect its contents** in a read-only viewer modal, or delete unused configs.
+* **Secrets**: Create write-only encrypted Swarm secrets or remove unused secrets. Secret contents are never displayed back in the UI after creation.
 
 ---
 
-## 10. Git Repositories & Sync Mappings
+## 12. Git Repositories & Sync Mappings
 
-This view is the engine room of Halyard's **GitOps Git-to-Cluster integration**.
+Halyard's GitOps engine connects remote Git repositories to Swarm stack deployments.
 
-### 📊 What You Can See
-* **Git Repositories View (`/git/repositories`)**: Manage connected remote git repositories, SSH deployment key setups, and connection statuses.
-* **Git Syncs View (`/git/syncs`)**: Main ledger mapping repositories to Swarm stacks. Shows Git URL, targeted branch, compose file path, sync interval, and last reconciliation status.
-
-### ⚙️ Operator Actions
-* **Map GitSync**: Connect a repository and branch to a new stack. Set automatic reconciliation polling intervals.
-* **Auto-Sync Toggle**: Enable or disable continuous GitOps polling. If disabled, the stack will only update on manual command clicks.
-
----
-
-## 11. Container Image Updates & Automated Stack Restarts
-
-Halyard includes an automated background image poller that scans remote image registries, downloads updated tags directly to relevant cluster nodes, and optionally triggers rolling restarts of matching Swarm services.
-
-### 📊 What You Can See
-* **Settings (`/settings`)**:
-  * **Update Check Interval**: Configurable timer (in hours) defining how frequently Halyard scans all unique image+platform pairs in the Swarm.
-  * **Update Stacks Option**: Toggle controlling whether affected services should be automatically restarted upon pulling new images.
-
-### ⚙️ Operator Actions
-* **Configure Polling Timer**: Set the update check interval anywhere from 1 to 72 hours (or set to `0` to disable automatic background checks).
-* **Toggle Update Stacks**: Enable the **Update stacks** checkbox to automatically restart services when newer images are detected. Triggers native Docker Swarm rolling updates (`ServiceUpdate`) with automatic stale digest unpinning and zero downtime across both replicated and global services.
-* **Check for Updates Now**: Instantly trigger an on-demand cluster-wide image poll with real-time feedback.
-
-### 📝 Logging Behavior
-Halyard's stdout/stderr log features high-signal output during image polling:
-* When a poll begins: `Triggering global image update poll`
-* When a newer image version is detected and pulled to a node: `Found new image for <image url>, pulling to node <node-name>`
-* Images that are already up to date are silently skipped to prevent log spam.
+### 📊 What You Can See & Do
+* **Git Repositories (`/git/repositories`)**: Add, edit, delete, and **Test Connection** on remote Git repositories (with optional username and token/password authentication).
+* **Git Syncs (`/git/syncs`)**: Map a stack name to a repository, branch, and compose file path:
+  * **Browse Repository**: Interactive file picker highlighting `.yml` / `.yaml` files directly on the selected remote branch.
+  * **Additional Files**: Toggle pulling sibling files (such as `.env`) from the compose directory.
+  * **Auto Sync**: Toggle periodic background Git reconciliation, or trigger **Force Sync Now** on demand.
+  * Shows short 7-character **Commit SHA**, sync status (`Ready`, `Syncing`, `Out of Date`), and relative last sync timestamp.
 
 ---
 
-## 12. Event Audit Trail
+## 13. System Settings, Themes & Automated Image Polling
 
-Monitor the history of all environment changes in a unified view.
+All global system configuration lives in **Settings** (`/settings`).
 
-### 📊 What You Can See
-* **Chronological Events**: Logs every GitOps action, manual sync trigger, image update pull, resource prune, and container deployment event with full commit descriptions and timestamps.
+### 🎨 Appearance
+* **Color Scheme**: Switch between **System** (follows OS dark/light preference), **Dark (Deep Slate)**, and **Light (Alabaster)**. Theme toggling is also accessible from the top-right user menu.
 
-### ⚙️ Operator Actions
-* **Filter Logs**: Search event listings to isolate deployment errors.
+### 🔄 GitOps Reconciliation
+* **Sync Concurrency**: Limit concurrent Git sync operations (`0`–`20`, where `0` allows unrestricted parallelism).
+* **Sync Interval (minutes)**: Configure how frequently Halyard polls repositories for commits when Auto Sync is enabled (`1`–`60` minutes).
+
+### 📦 Image Update Polling
+Halyard's background `ImagePoller` periodically scans unique image+platform pairs across the cluster, pulls newer tags onto matching nodes, and optionally performs zero-downtime rolling service updates:
+* **Check Interval (hours)**: Set polling frequency (`1`–`72` hours, or `0` to disable scheduled checks).
+* **Update Stacks**: Toggle switch (`Auto-Restart Enabled`) controlling whether services using newly pulled images are automatically updated via native Docker Swarm rolling `ServiceUpdate` (clearing stale digest pins).
+* **Check Now**: Run an immediate cluster-wide poll and view scanned/updated image counts and restarted service names.
 
 ---
 
-> **Tip**: All data-tables inside the Halyard UI default to a clean **25-items-per-page** pagination structure with unified `36px` control sizes, providing a comfortable visual flow for small to large enterprise Swarm clusters.
+## 14. User Profile & Log Colors
+
+Navigate to **Profile Settings** (`/settings/profile`) from the top-right avatar menu:
+* **Operator Account**: View your account display name and username.
+* **Change Password**: Update your operator login password (minimum 8 characters).
+* **Appearance & Log Colors**: Choose your **Color Scheme** and customize all 8 standard ANSI foreground colors rendered inside the Container Detail **Logs** tab.
+
+---
+
+> **Tip**: All paginated data tables default to **25 items per page**, and responsive card layouts automatically activate on mobile viewports alongside the mobile drawer and bottom navigation bar.
