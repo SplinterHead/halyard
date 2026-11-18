@@ -1,100 +1,163 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">{{ title }}</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
+  <div class="section-block" style="gap: 24px;">
+    <!-- Standardized Page Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <h1 class="page-title">{{ title }}</h1>
+        <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>
+      </div>
+      <div class="header-actions">
+        <input
           v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
+          type="search"
+          class="search-input"
           :placeholder="searchPlaceholder"
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
+          :aria-label="searchPlaceholder"
+        />
         <slot name="actions"></slot>
-        <v-btn
-          icon="mdi-refresh"
+        <button
+          type="button"
+          class="btn btn-icon"
+          :disabled="loading"
+          aria-label="Refresh"
+          title="Refresh"
           @click="$emit('refresh')"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
+        >
+          <v-icon size="16" :class="{ 'spin-icon': loading }">mdi-refresh</v-icon>
+        </button>
       </div>
     </div>
 
     <!-- Additional Dialogs / Top Content Slot -->
     <slot name="top"></slot>
 
-    <v-divider class="my-4"></v-divider>
-    
     <Loader :loading="loading" />
 
-    <v-row v-if="items.length === 0 && !loading" justify="center" class="mt-8">
-      <v-col cols="12" md="6" class="text-center">
-        <v-icon size="64" color="grey-lighten-1" class="mb-4">{{ emptyIcon }}</v-icon>
-        <h3 class="text-h5 text-grey-darken-1">{{ emptyTitle }}</h3>
-        <p class="text-body-1 text-grey-darken-1 mt-2">
-          {{ emptyDescription }}
-        </p>
-      </v-col>
-    </v-row>
-
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="items"
-        :search="searchQuery"
-        :sort-by="sortBy"
-        :row-props="rowProps"
-        class="bg-transparent"
-        density="comfortable"
-        @click:row="(e, row) => $emit('click:row', e, row)"
-        items-per-page="25"
-      >
-        <!-- Pass through all item.* slots -->
-        <template v-for="(_, slotName) in $slots" v-slot:[slotName]="slotProps">
-          <slot v-if="slotName.startsWith('item.')" :name="slotName" v-bind="slotProps"></slot>
-        </template>
-      </v-data-table>
+    <!-- Empty State -->
+    <div v-if="items.length === 0 && !loading" class="surface-card card-body text-center" style="padding: 48px 24px;">
+      <v-icon v-if="emptyIcon" size="42" class="text-3 mb-3">{{ emptyIcon }}</v-icon>
+      <div class="card-title" style="font-size: 16px;">{{ emptyTitle }}</div>
+      <p class="page-subtitle" style="margin-block-start: 6px;">{{ emptyDescription }}</p>
     </div>
+
+    <template v-else>
+      <!-- Desktop Table View -->
+      <div class="surface-card" :class="{ 'desktop-table-view': hasMobileSlot }">
+        <v-data-table
+          :headers="headers"
+          :items="items"
+          :search="searchQuery"
+          :sort-by="sortBy"
+          :row-props="rowProps"
+          :class="{ 'clickable-rows': clickableRows }"
+          density="comfortable"
+          :items-per-page="itemsPerPage"
+          @click:row="(e: any, row: any) => $emit('click:row', e, row)"
+        >
+          <template v-for="(_, slotName) in $slots" v-slot:[slotName]="slotProps">
+            <slot v-if="String(slotName).startsWith('item.')" :name="slotName" v-bind="slotProps"></slot>
+          </template>
+        </v-data-table>
+      </div>
+
+      <!-- Mobile Curated 2-Row Cards View -->
+      <div v-if="hasMobileSlot" class="mobile-cards-view">
+        <template v-for="(item, index) in filteredItems" :key="index">
+          <slot name="mobile-item" :item="item" :index="index"></slot>
+        </template>
+        <div class="mobile-cards-count">{{ filteredItems.length }} items</div>
+      </div>
+    </template>
   </div>
 </template>
 
-<script setup>
-import { ref } from 'vue';
+<script setup lang="ts">
+import { ref, computed, useSlots } from 'vue';
 import Loader from './Loader.vue';
 
-const props = defineProps({
-  title: String,
-  items: {
-    type: Array,
-    default: () => []
-  },
-  headers: Array,
-  loading: Boolean,
-  emptyIcon: String,
-  emptyTitle: String,
-  emptyDescription: String,
-  searchPlaceholder: {
-    type: String,
-    default: 'Search...'
-  },
-  sortBy: {
-    type: Array,
-    default: () => []
-  },
-  rowProps: {
-    type: Function,
-    default: undefined
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    subtitle?: string;
+    items?: any[];
+    headers?: any[];
+    loading?: boolean;
+    emptyIcon?: string;
+    emptyTitle?: string;
+    emptyDescription?: string;
+    searchPlaceholder?: string;
+    sortBy?: any[];
+    rowProps?: (data: any) => any;
+    itemsPerPage?: number | string;
+    clickableRows?: boolean;
+  }>(),
+  {
+    subtitle: '',
+    items: () => [],
+    headers: () => [],
+    loading: false,
+    emptyIcon: '',
+    emptyTitle: 'No items found',
+    emptyDescription: '',
+    searchPlaceholder: 'Search...',
+    sortBy: () => [],
+    rowProps: undefined,
+    itemsPerPage: 25,
+    clickableRows: false,
   }
-});
+);
 
-defineEmits(['refresh', 'click:row']);
+defineEmits<{
+  refresh: [];
+  'click:row': [event: any, row: any];
+}>();
 
+const slots = useSlots();
 const searchQuery = ref('');
+
+const hasMobileSlot = computed(() => Boolean(slots['mobile-item']));
+
+const flattenValue = (val: unknown): string => {
+  if (val == null) return '';
+  if (Array.isArray(val)) return val.map(flattenValue).join(' ');
+  if (typeof val === 'object') return Object.values(val as Record<string, unknown>).map(flattenValue).join(' ');
+  return String(val);
+};
+
+const filteredItems = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  let list = props.items;
+  if (q) {
+    list = list.filter((item) => flattenValue(item).toLowerCase().includes(q));
+  } else {
+    list = [...list];
+  }
+
+  if (props.sortBy && props.sortBy.length > 0) {
+    const primary = props.sortBy[0];
+    const key = primary?.key;
+    const desc = primary?.order === 'desc';
+    if (key) {
+      list.sort((a: any, b: any) => {
+        const av = a?.[key];
+        const bv = b?.[key];
+        const cmp = flattenValue(av).localeCompare(flattenValue(bv), undefined, { numeric: true });
+        return desc ? -cmp : cmp;
+      });
+    }
+  }
+
+  return list;
+});
 </script>
+
+<style scoped>
+.spin-icon {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+</style>

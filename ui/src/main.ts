@@ -1,9 +1,10 @@
 import { createApp } from 'vue'
-import './style.css'
 import App from './App.vue'
 import vuetify from './plugins/vuetify'
 import router from './router'
 import VueApexCharts from "vue3-apexcharts";
+import { initTheme } from './theme'
+import './style.css'
 
 // Intercept all API fetches to inject the Authorization header and handle 401 redirects
 const originalFetch = window.fetch;
@@ -37,6 +38,8 @@ window.fetch = async (input, init) => {
 
   return response;
 };
+
+initTheme(vuetify.theme)
 
 const app = createApp(App)
 app.use(vuetify)

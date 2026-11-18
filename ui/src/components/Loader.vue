@@ -3,8 +3,8 @@
     v-if="loading"
     indeterminate
     color="primary"
-    height="4"
-    class="mb-4 rounded-sm"
+    height="2"
+    class="mb-2"
   ></v-progress-linear>
 </template>
 

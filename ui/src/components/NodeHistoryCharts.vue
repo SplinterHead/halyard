@@ -1,158 +1,172 @@
 <template>
-  <div class="mt-4 mb-4">
-    <div class="d-flex align-center mb-4 px-1">
-      <h3 class="text-subtitle-2 font-weight-bold text-grey">Historical Performance (Last 24h)</h3>
-      <v-spacer></v-spacer>
-      <v-btn icon="mdi-refresh" size="x-small" class="refresh-btn" flat @click="fetchHistory" :loading="loading"></v-btn>
+  <section class="section-block" aria-label="Historical Performance">
+    <div class="section-header">
+      <h2 class="section-title">Historical Performance (Last 24h)</h2>
+      <button
+        type="button"
+        class="btn btn-icon btn-sm"
+        :disabled="loading"
+        aria-label="Refresh history"
+        @click="fetchHistory"
+      >
+        <v-icon size="15">mdi-refresh</v-icon>
+      </button>
     </div>
 
-    <v-row>
-      <v-col cols="12" md="6">
-        <v-card class="glass-card pa-2" elevation="0">
+    <div class="detail-grid">
+      <section class="surface-card col-6">
+        <div class="card-header">
+          <span class="card-title">CPU Usage (%)</span>
+        </div>
+        <div class="card-body" style="padding: 12px;">
           <apexchart
             type="area"
             height="200"
             :options="cpuChartOptions"
             :series="cpuSeries"
           ></apexchart>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-card class="glass-card pa-2" elevation="0">
+        </div>
+      </section>
+
+      <section class="surface-card col-6">
+        <div class="card-header">
+          <span class="card-title">Memory Usage (GB)</span>
+        </div>
+        <div class="card-body" style="padding: 12px;">
           <apexchart
             type="area"
             height="200"
             :options="memChartOptions"
             :series="memSeries"
           ></apexchart>
-        </v-card>
-      </v-col>
-    </v-row>
-  </div>
+        </div>
+      </section>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue';
+import { useTheme } from '../theme';
 
 const props = defineProps<{
-  nodeId: string
-  totalMemory?: number
-}>()
+  nodeId: string;
+  totalMemory?: number;
+}>();
 
-const loading = ref(false)
-const history = ref<any[]>([])
+const { isDark, currentTheme } = useTheme();
+const loading = ref(false);
+const history = ref<any[]>([]);
 
 const fetchHistory = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await fetch(`/api/nodes/history?id=${props.nodeId}`)
+    const response = await fetch(`/api/nodes/history?id=${props.nodeId}`);
     if (response.ok) {
-      history.value = await response.json()
+      history.value = (await response.json()) || [];
     }
   } catch (err) {
-    console.error('Failed to fetch history:', err)
+    console.error('Failed to fetch history:', err);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
-const cpuSeries = computed(() => [{
-  name: 'CPU Usage',
-  data: history.value.map(h => ({
-    x: new Date(h.timestamp).getTime(),
-    y: Math.round(h.cpu_usage * 100) / 100
-  }))
-}])
+const cpuSeries = computed(() => [
+  {
+    name: 'CPU Usage',
+    data: history.value.map((h) => ({
+      x: new Date(h.timestamp).getTime(),
+      y: Math.round(h.cpu_usage * 100) / 100,
+    })),
+  },
+]);
 
-const memSeries = computed(() => [{
-  name: 'Memory Usage',
-  data: history.value.map(h => ({
-    x: new Date(h.timestamp).getTime(),
-    y: Math.round((h.memory_usage / (1024 * 1024 * 1024)) * 100) / 100 // Convert to GB
-  }))
-}])
+const memSeries = computed(() => [
+  {
+    name: 'Memory Usage',
+    data: history.value.map((h) => ({
+      x: new Date(h.timestamp).getTime(),
+      y: Math.round((h.memory_usage / (1024 * 1024 * 1024)) * 100) / 100,
+    })),
+  },
+]);
 
-const commonOptions = {
-  chart: {
-    toolbar: { show: false },
-    animations: { enabled: false },
-    background: 'transparent',
-  },
-  dataLabels: { enabled: false },
-  theme: { mode: 'dark' },
-  stroke: { curve: 'smooth', width: 2 },
-  fill: {
-    type: 'gradient',
-    gradient: {
-      shadeIntensity: 1,
-      opacityFrom: 0.4,
-      opacityTo: 0.1,
-    }
-  },
-  xaxis: {
-    type: 'datetime',
-    labels: {
-      datetimeUTC: false,
-      style: { colors: '#757575' }
-    }
-  },
-  yaxis: {
-    labels: {
-      style: { colors: '#757575' }
-    }
-  },
-  grid: {
-    borderColor: 'rgba(255,255,255,0.05)',
-  }
-}
+const commonOptions = computed(() => {
+  const c = currentTheme.value.colors;
+  return {
+    chart: {
+      toolbar: { show: false },
+      animations: { enabled: false },
+      background: 'transparent',
+      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+    },
+    dataLabels: { enabled: false },
+    theme: { mode: isDark.value ? 'dark' : 'light' },
+    stroke: { curve: 'smooth', width: 2 },
+    fill: {
+      type: 'gradient',
+      gradient: {
+        shadeIntensity: 1,
+        opacityFrom: 0.35,
+        opacityTo: 0.05,
+      },
+    },
+    xaxis: {
+      type: 'datetime',
+      labels: {
+        datetimeUTC: false,
+        style: { colors: c.textSecondary },
+      },
+    },
+    yaxis: {
+      labels: {
+        style: { colors: c.textSecondary },
+      },
+    },
+    grid: {
+      borderColor: c.borderSecondary,
+    },
+  };
+});
 
 const cpuChartOptions = computed(() => ({
-  ...commonOptions,
-  colors: ['#4CAF50'],
+  ...commonOptions.value,
+  colors: [currentTheme.value.colors.statusOk],
   yaxis: {
-    ...commonOptions.yaxis,
+    ...commonOptions.value.yaxis,
     min: 0,
     max: 100,
-    title: { text: 'CPU %', style: { color: '#757575' } }
-  }
-}))
+  },
+}));
 
 const memChartOptions = computed(() => {
   const opts: any = {
-    ...commonOptions,
-    colors: ['#2196F3'],
+    ...commonOptions.value,
+    colors: [currentTheme.value.colors.accent],
     yaxis: {
-      ...commonOptions.yaxis,
+      ...commonOptions.value.yaxis,
       min: 0,
-      title: { text: 'Memory (GB)', style: { color: '#757575' } }
-    }
-  }
-  
+    },
+  };
   if (props.totalMemory) {
-    opts.yaxis.max = Math.round((props.totalMemory / (1024 * 1024 * 1024)) * 100) / 100
+    opts.yaxis.max = Math.round((props.totalMemory / (1024 * 1024 * 1024)) * 100) / 100;
   }
-  
-  return opts
-})
+  return opts;
+});
 
 const addStats = (stats: any) => {
-  // Only add if it's for this node (though parent should filter)
   history.value.push({
     timestamp: stats.timestamp || new Date().toISOString(),
     cpu_usage: stats.cpu_usage,
-    memory_usage: stats.memory_usage
-  })
-  
-  // Keep a reasonable number of points for the chart
+    memory_usage: stats.memory_usage,
+  });
   if (history.value.length > 500) {
-    history.value.shift()
+    history.value.shift();
   }
-}
+};
 
-defineExpose({ addStats })
+defineExpose({ addStats });
 
-onMounted(fetchHistory)
+onMounted(fetchHistory);
 </script>
-
-<style scoped>
-</style>

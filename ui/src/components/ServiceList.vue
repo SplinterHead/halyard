@@ -1,193 +1,147 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Swarm Services</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search services..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchServices"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
-
-    <v-divider class="my-4"></v-divider>
-    
-    <Loader :loading="loading" />
-
-    <v-row v-if="services.length === 0 && !loading" justify="center" class="mt-8">
-      <v-col cols="12" md="6" class="text-center">
-        <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-server-off</v-icon>
-        <h3 class="text-h5 text-grey-darken-1">No services found</h3>
-        <p class="text-body-1 text-grey-darken-1 mt-2">
-          Deploy services to your cluster to manage and monitor them here.
+  <DataTablePage
+    title="Swarm Services"
+    subtitle="Replicated and global Docker Swarm services across the cluster."
+    :items="services"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-server-off"
+    empty-title="No services found"
+    empty-description="Deploy services to your cluster to manage and monitor them here."
+    search-placeholder="Search services..."
+    :sort-by="[{ key: 'name', order: 'asc' }]"
+    clickable-rows
+    @refresh="fetchServices"
+    @click:row="goToDetail"
+  >
+    <template #top>
+      <AppModal v-model="deleteDialog" title="Delete Service?" :persistent="deleting">
+        <p class="text-2" style="margin: 0;">
+          Are you sure you want to remove the service
+          <strong class="text-1">{{ serviceToDelete?.name }}</strong>?
+          This will permanently stop and remove all tasks for this service.
         </p>
-      </v-col>
-    </v-row>
+        <template #footer>
+          <button type="button" class="btn" :disabled="deleting" @click="deleteDialog = false">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-danger" :disabled="deleting" @click="deleteService">
+            {{ deleting ? 'Removing...' : 'Remove Service' }}
+          </button>
+        </template>
+      </AppModal>
 
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="services"
-        :search="searchQuery"
-        :row-props="getRowProps"
-        class="bg-transparent clickable-rows"
-        hover
-        density="comfortable"
-        @click:row="goToDetail"
-        items-per-page="25"
+      <AppModal v-model="errorDialog" title="Service Deletion Failed">
+        <p class="text-2" style="margin: 0;">The service could not be deleted.</p>
+        <pre class="log-viewport text-err" style="margin: 0; white-space: pre-wrap;">{{ errorMessage }}</pre>
+        <template #footer>
+          <button type="button" class="btn btn-primary" @click="errorDialog = false">Dismiss</button>
+        </template>
+      </AppModal>
+    </template>
+
+    <template #item.name="{ item }">
+      <div class="d-flex flex-column" style="gap: 2px;">
+        <div class="flex-row">
+          <span
+            class="status-dot"
+            :class="item.running === item.replicas ? 'dot-ok' : (item.running === 0 && item.replicas > 0 ? 'dot-err' : 'dot-warn')"
+          ></span>
+          <span class="fw-500 text-1">{{ item.name }}</span>
+        </div>
+        <span class="text-3" style="font-size: 12px; padding-inline-start: 15px;">
+          {{ item.stack || 'No stack' }}
+        </span>
+      </div>
+    </template>
+
+    <template #item.replicas="{ item }">
+      <div class="flex-row">
+        <v-icon
+          size="15"
+          class="text-2"
+          :title="item.mode"
+          :aria-label="item.mode"
+        >
+          {{ item.mode === 'global' ? 'mdi-earth' : 'mdi-view-grid-outline' }}
+        </v-icon>
+        <span class="status-badge">
+          <span class="status-dot" :class="item.running === item.replicas ? 'dot-ok' : 'dot-warn'"></span>
+          {{ item.running }} / {{ item.replicas }}
+        </span>
+      </div>
+    </template>
+
+    <template #item.image="{ value }">
+      <span class="mono text-2 text-truncate d-inline-block" style="max-width: 240px;" :title="value">
+        {{ formatImage(value) }}
+      </span>
+    </template>
+
+    <template #item.ports="{ value }">
+      <div v-if="value && value.length" class="flex-row" style="flex-wrap: wrap; gap: 4px;">
+        <span v-for="port in value" :key="port" class="status-badge mono">{{ port }}</span>
+      </div>
+      <span v-else class="text-3">—</span>
+    </template>
+
+    <template #item.updated_at="{ value }">
+      <div class="text-end">
+        <RelativeTime :value="value" />
+      </div>
+    </template>
+
+    <template #item.actions="{ item }">
+      <div class="d-flex justify-center">
+        <button
+          type="button"
+          class="btn btn-icon btn-sm btn-danger-subtle"
+          title="Delete Service"
+          aria-label="Delete Service"
+          @click.stop="confirmDelete(item)"
+        >
+          <v-icon size="15">mdi-delete-outline</v-icon>
+        </button>
+      </div>
+    </template>
+
+    <!-- Mobile Curated 2-Row Card -->
+    <template #mobile-item="{ item }">
+      <div
+        class="mobile-item-card"
+        role="button"
+        tabindex="0"
+        @click="goToDetail($event, { item })"
+        @keydown.enter="goToDetail($event, { item })"
       >
-        <template v-slot:item.name="{ item }">
-          <div class="d-flex flex-column">
-            <span class="text-body-2 font-weight-bold">{{ item.name }}</span>
-            <span class="text-caption text-grey">{{ item.stack }}</span>
-          </div>
-        </template>
-
-        <template v-slot:item.replicas="{ item }">
-          <div class="d-flex align-center">
-            <v-chip
-              :color="item.running < item.replicas ? 'warning' : 'success'"
-              size="x-small"
-              label
-              class="font-weight-bold"
-            >
-              {{ item.running }} / {{ item.replicas }}
-            </v-chip>
-            <span class="text-caption text-grey ms-2">{{ item.mode }}</span>
-          </div>
-        </template>
-
-        <template v-slot:item.image="{ value }">
-          <div class="d-flex align-center">
-            <v-icon
-              size="18"
-              color="primary"
-              class="me-2"
-              :icon="getRegistryIcon(value)"
-            ></v-icon>
+        <div class="mobile-card-top">
+          <div class="flex-row" style="min-width: 0;">
             <span
-              class="text-caption font-mono text-primary truncate-image"
-              :title="value"
-            >
-              {{ formatImage(value) }}
-            </span>
+              class="status-dot"
+              :class="item.running === item.replicas ? 'dot-ok' : (item.running === 0 && item.replicas > 0 ? 'dot-err' : 'dot-warn')"
+            ></span>
+            <span class="fw-500 text-1 text-truncate">{{ item.name }}</span>
           </div>
-        </template>
-
-        <template v-slot:item.ports="{ value }">
-          <div class="d-flex flex-wrap gap-1">
-            <v-chip
-              v-for="port in value"
-              :key="port"
-              size="x-small"
-              variant="tonal"
-              color="info"
-            >
-              {{ port }}
-            </v-chip>
-            <span
-              v-if="!value || value.length === 0"
-              class="text-caption text-grey-lighten-1"
-              >-</span
-            >
-          </div>
-        </template>
-
-        <template v-slot:item.updated_at="{ value }">
-          <div class="text-end">
-            <RelativeTime :value="value" />
-          </div>
-        </template>
-
-        <template v-slot:item.actions="{ item }">
-          <div class="d-flex justify-center align-center">
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              color="error"
-              @click.stop="confirmDelete(item)"
-            ></v-btn>
-          </div>
-        </template>
-
-      </v-data-table>
-    </div>
-
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="450px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
-          <v-icon color="error" class="me-2">mdi-alert-decagram</v-icon>
-          Delete Service?
-        </v-card-title>
-        <v-card-text class="pa-6 pt-2">
-          Are you sure you want to remove the service <strong class="font-mono text-error">{{ serviceToDelete?.name }}</strong>? This will permanently stop and remove all tasks for this service.
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn
-            color="error"
-            variant="flat"
-            @click="deleteService"
-            :loading="deleting"
-          >Remove Service</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Error Dialog -->
-    <v-dialog v-model="errorDialog" max-width="500px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2 text-error d-flex align-center">
-          <v-icon color="error" class="me-2">mdi-alert-circle</v-icon>
-          Service Deletion Failed
-        </v-card-title>
-        <v-card-text class="pa-6 pt-0">
-          <p class="mb-4">The service could not be deleted.</p>
-          <div class="bg-black bg-opacity-20 pa-4 rounded-lg font-mono text-caption text-error border border-error border-opacity-20">
-            {{ errorMessage }}
-          </div>
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="flat" color="primary" @click="errorDialog = false">Dismiss</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-  </div>
+          <span class="status-badge">{{ item.running }}/{{ item.replicas }}</span>
+        </div>
+        <div class="mobile-card-bottom">
+          <span><span class="text-3">Stack:</span> {{ item.stack || '—' }}</span>
+          <span><span class="text-3">Updated:</span> {{ formatRelativeTime(item.updated_at) }}</span>
+        </div>
+      </div>
+    </template>
+  </DataTablePage>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import Loader from "./Loader.vue";
-
-const searchQuery = ref("");
-import { useRouter } from "vue-router";
-import RelativeTime from "./RelativeTime.vue";
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import DataTablePage from './DataTablePage.vue';
+import AppModal from './AppModal.vue';
+import RelativeTime from './RelativeTime.vue';
+import { formatRelativeTime } from '../utils/time';
 
 const router = useRouter();
-const goToDetail = (_: any, { item }: any) => {
-  router.push(`/swarm/services/${item.id}`);
-};
 
 interface Service {
   id: string;
@@ -207,86 +161,43 @@ const deleteDialog = ref(false);
 const deleting = ref(false);
 const serviceToDelete = ref<Service | null>(null);
 const errorDialog = ref(false);
-const errorMessage = ref("");
-
-const getRowProps = ({ item }: any) => {
-  let colorClass = "status-success";
-  if (item.running === 0 && item.replicas > 0) colorClass = "status-error";
-  else if (item.running < item.replicas) colorClass = "status-warning";
-
-  return {
-    class: `status-bar-row ${colorClass}`,
-  };
-};
+const errorMessage = ref('');
 
 const headers = [
-  {
-    title: "Service Name",
-    key: "name",
-    sortable: true,
-    align: "start" as const,
-  },
-  {
-    title: "Replicas",
-    key: "replicas",
-    width: "150px",
-    align: "start" as const,
-  },
-  { title: "Image", key: "image", sortable: true, align: "start" as const },
-  { title: "Ports", key: "ports", align: "start" as const },
-  {
-    title: "Updated",
-    key: "updated_at",
-    width: "200px",
-    align: "end" as const,
-  },
-  {
-    title: "Actions",
-    key: "actions",
-    width: "80px",
-    align: "center" as const,
-    sortable: false,
-  },
+  { title: 'Service', key: 'name', sortable: true, align: 'start' as const },
+  { title: 'Replicas', key: 'replicas', width: '140px', align: 'start' as const },
+  { title: 'Image', key: 'image', width: '260px', sortable: true, align: 'start' as const },
+  { title: 'Ports', key: 'ports', width: '180px', align: 'start' as const },
+  { title: 'Updated', key: 'updated_at', width: '130px', align: 'end' as const },
+  { title: 'Actions', key: 'actions', width: '80px', align: 'center' as const, sortable: false },
 ];
 
-const getRegistryIcon = (repo: string): string => {
-  if (!repo) return 'mdi-docker'
-  const lower = repo.toLowerCase()
-  if (lower.includes('ghcr.io')) return 'mdi-github'
-  if (lower.includes('gcr.io') || lower.includes('pkg.dev')) return 'mdi-google'
-  if (lower.includes('quay.io')) return 'mdi-redhat'
-  if (lower.includes('public.ecr.aws') || lower.includes('.dkr.ecr.')) return 'mdi-aws'
-  if (lower.includes('azurecr.io')) return 'mdi-microsoft-azure'
-  if (lower.includes('gitlab.com')) return 'mdi-gitlab'
-  if (lower.includes('lscr.io')) return 'mdi-linux'
-  return 'mdi-docker' // Default docker hub whale
-}
+const goToDetail = (_: any, { item }: any) => {
+  router.push(`/swarm/services/${item.id}`);
+};
 
 const formatImage = (image: string) => {
-  if (!image) return "-";
-  // Remove digest if present
-  let clean = image.split("@")[0];
-  
-  // Strip tag (everything after the last colon, excluding any registry port)
-  const slashParts = clean.split("/");
+  if (!image) return '-';
+  let clean = image.split('@')[0];
+  const slashParts = clean.split('/');
   const lastPart = slashParts[slashParts.length - 1];
-  
-  if (lastPart.includes(":")) {
-    const colonParts = lastPart.split(":");
-    slashParts[slashParts.length - 1] = colonParts.slice(0, -1).join(":");
-    clean = slashParts.join("/");
+  if (lastPart.includes(':')) {
+    const colonParts = lastPart.split(':');
+    slashParts[slashParts.length - 1] = colonParts.slice(0, -1).join(':');
+    clean = slashParts.join('/');
   }
-  
   return clean;
 };
 
 const fetchServices = async () => {
   loading.value = true;
   try {
-    const response = await fetch("/api/services");
-    services.value = await response.json();
+    const response = await fetch('/api/services');
+    if (response.ok) {
+      services.value = (await response.json()) || [];
+    }
   } catch (error) {
-    console.error("Failed to fetch services:", error);
+    console.error('Failed to fetch services:', error);
   } finally {
     loading.value = false;
   }
@@ -302,19 +213,16 @@ const deleteService = async () => {
   deleting.value = true;
   try {
     const response = await fetch(`/api/services?id=${encodeURIComponent(serviceToDelete.value.id)}`, {
-      method: "DELETE",
+      method: 'DELETE',
     });
-
     if (response.ok) {
       await fetchServices();
       deleteDialog.value = false;
     } else {
-      const err = await response.text();
-      errorMessage.value = err;
+      errorMessage.value = await response.text();
       errorDialog.value = true;
     }
   } catch (err) {
-    console.error("Failed to delete service:", err);
     errorMessage.value = String(err);
     errorDialog.value = true;
   } finally {
@@ -325,15 +233,3 @@ const deleteService = async () => {
 
 onMounted(fetchServices);
 </script>
-
-<style scoped>
-.truncate-image {
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.gap-1 {
-  gap: 4px;
-}
-</style>
