@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/SplinterHead/halyard/api"
@@ -49,6 +50,17 @@ func (m *ImageManager) ListImages(ctx context.Context) ([]api.ImageInfo, error) 
 
 	// 3. Get in-use image IDs and image strings from all local containers
 	containers, _ := m.docker.ContainerList(ctx, container.ListOptions{All: true})
+
+	return buildImageInfos(list, containers, arch), nil
+}
+
+type imageKey struct {
+	id   string
+	repo string
+	tag  string
+}
+
+func buildImageInfos(list []image.Summary, containers []types.Container, arch string) []api.ImageInfo {
 	inUseMap := make(map[string]bool)
 	containerImageMap := make(map[string]string)
 	for _, c := range containers {
@@ -58,7 +70,17 @@ func (m *ImageManager) ListImages(ctx context.Context) ([]api.ImageInfo, error) 
 		}
 	}
 
-	images := make([]api.ImageInfo, 0)
+	seen := make(map[imageKey]bool)
+	images := make([]api.ImageInfo, 0, len(list))
+	appendUnique := func(info api.ImageInfo) {
+		key := imageKey{id: info.ID, repo: info.Repository, tag: info.Tag}
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		images = append(images, info)
+	}
+
 	for _, img := range list {
 		inUse := inUseMap[img.ID]
 
@@ -81,7 +103,7 @@ func (m *ImageManager) ListImages(ctx context.Context) ([]api.ImageInfo, error) 
 
 		// If still completely untagged
 		if len(tags) == 0 {
-			images = append(images, api.ImageInfo{
+			appendUnique(api.ImageInfo{
 				ID:           img.ID,
 				Repository:   "<none>",
 				Tag:          "<none>",
@@ -93,14 +115,14 @@ func (m *ImageManager) ListImages(ctx context.Context) ([]api.ImageInfo, error) 
 			continue
 		}
 
-		// List an entry for each tag associated with the image
+		// List an entry for each unique (ID, repo, tag) associated with the image
 		for _, repoTag := range tags {
 			repo, tag := parseRepoTag(repoTag)
 			if (repo == "" || repo == "<none>") && containerImageMap[img.ID] != "" {
 				repo, tag = parseRepoTag(containerImageMap[img.ID])
 			}
 
-			images = append(images, api.ImageInfo{
+			appendUnique(api.ImageInfo{
 				ID:           img.ID,
 				Repository:   repo,
 				Tag:          tag,
@@ -112,7 +134,7 @@ func (m *ImageManager) ListImages(ctx context.Context) ([]api.ImageInfo, error) 
 		}
 	}
 
-	return images, nil
+	return images
 }
 
 func (m *ImageManager) RemoveImage(ctx context.Context, id string, force bool) error {
