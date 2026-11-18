@@ -1,6 +1,7 @@
 <template>
   <DataTablePage
     title="Node Images"
+    subtitle="Container images stored across cluster nodes and remote digest status."
     :items="images"
     :headers="headers"
     :loading="loading"
@@ -8,312 +9,253 @@
     empty-title="No images found"
     empty-description="No images are currently downloaded on any of the cluster nodes."
     search-placeholder="Search images..."
-    :sort-by="[{ key: 'repo_tags', order: 'asc' }]"
-    :row-props="getRowProps"
+    :sort-by="[{ key: 'repository', order: 'asc' }]"
     @refresh="fetchImages"
   >
-    <template v-slot:actions>
-      <v-btn
-          prepend-icon="mdi-layers-search-outline"
-          @click="checkAllImages"
-          :loading="checkingAll"
-          variant="tonal"
-          color="primary"
-          size="small"
+    <template #actions>
+      <button type="button" class="btn btn-primary" :disabled="checkingAll" @click="checkAllImages">
+        {{ checkingAll ? 'Checking...' : 'Check All Updates' }}
+      </button>
+    </template>
+
+    <template #top>
+      <AppModal v-model="deleteDialog" title="Delete Docker Image?" :persistent="deleting">
+        <p class="text-2" style="margin: 0;">
+          Are you sure you want to remove this image tag from
+          <strong class="text-1">{{ imageToDelete?.node }}</strong>?
+        </p>
+
+        <div class="nested-box mono" style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;">
+          <div><span class="text-3">Image:</span> {{ imageToDelete?.repository }}:{{ imageToDelete?.tag }}</div>
+          <div class="text-truncate"><span class="text-3">ID:</span> {{ imageToDelete?.id }}</div>
+          <div><span class="text-3">Node:</span> {{ imageToDelete?.node }}</div>
+        </div>
+
+        <div v-if="imageToDelete?.in_use" class="alert-banner alert-warn">
+          This image is currently in use by one or more containers. Deleting it requires force mode.
+        </div>
+
+        <label class="nested-box flex-between" style="cursor: pointer;">
+          <span>
+            <strong class="fw-500 text-1" style="display: block;">Force delete image</strong>
+            <span class="text-2" style="font-size: 12px;">Equivalent to docker rmi -f</span>
+          </span>
+          <input v-model="forceDelete" type="checkbox" role="switch" class="toggle-switch" />
+        </label>
+
+        <template #footer>
+          <button type="button" class="btn" :disabled="deleting" @click="closeDeleteDialog">Cancel</button>
+          <button type="button" class="btn btn-danger" :disabled="deleting" @click="deleteImage">
+            {{ deleting ? 'Deleting...' : 'Delete' }}
+          </button>
+        </template>
+      </AppModal>
+    </template>
+
+    <template #item.repository="{ item }">
+      <div class="d-flex flex-column" style="gap: 2px; min-width: 0;">
+        <div class="flex-row" style="min-width: 0;">
+          <span class="status-dot" :class="getUpdateDot(item.up_to_date_status)"></span>
+          <span class="mono fw-500 text-1 text-truncate" style="max-width: 520px;" :title="item.repository">
+            {{ item.repository.split('@')[0] }}
+          </span>
+        </div>
+        <span class="mono text-3 text-truncate" style="max-width: 520px; padding-inline-start: 15px;" :title="item.tag">
+          {{ item.tag.split('@')[0] }}
+        </span>
+      </div>
+    </template>
+
+    <template #item.id="{ value }">
+      <span class="mono text-2" :title="value">
+        {{ value.replace('sha256:', '').substring(0, 12) }}
+      </span>
+    </template>
+
+    <template #item.architecture="{ value }">
+      <span class="status-badge mono">{{ value }}</span>
+    </template>
+
+    <template #item.node="{ value }">
+      <span class="text-2 text-truncate d-inline-block" style="max-width: 170px;" :title="value">{{ value }}</span>
+    </template>
+
+    <template #item.size="{ value }">
+      <span class="text-end d-block text-2" style="white-space: nowrap;">{{ formatSize(value) }}</span>
+    </template>
+
+    <template #item.in_use="{ value }">
+      <span class="status-badge">
+        <span class="status-dot" :class="value ? 'dot-ok' : ''"></span>
+        {{ value ? 'In Use' : 'Unused' }}
+      </span>
+    </template>
+
+    <template #item.actions="{ item }">
+      <div class="d-flex justify-center">
+        <button
+          type="button"
+          class="btn btn-icon btn-sm btn-danger-subtle"
+          title="Delete Image"
+          aria-label="Delete Image"
+          @click="confirmDelete(item)"
         >
-          Check All Updates
-        </v-btn>
+          <v-icon size="15">mdi-delete-outline</v-icon>
+        </button>
+      </div>
     </template>
-    <template v-slot:top>
-      <v-dialog v-model="deleteDialog" max-width="450px" persistent>
-            <v-card border flat class="bg-surface">
-              <v-card-title class="pa-6 pb-2 d-flex align-center">
-                <v-icon color="error" class="me-2">mdi-alert-circle-outline</v-icon>
-                <span class="text-h6 font-weight-bold">Delete Docker Image?</span>
-              </v-card-title>
-              
-              <v-card-text class="pa-6 pt-2">
-                <p class="text-body-2 mb-4">
-                  Are you sure you want to remove this image tag from <strong>{{ imageToDelete?.node }}</strong>?
-                </p>
-                <div class="bg-black bg-opacity-20 rounded-lg pa-3 mb-4 font-mono text-caption">
-                  <div><strong>Image:</strong> {{ imageToDelete?.repository }}:{{ imageToDelete?.tag }}</div>
-                  <div class="text-truncate-200"><strong>ID:</strong> {{ imageToDelete?.id }}</div>
-                  <div><strong>Node:</strong> {{ imageToDelete?.node }}</div>
-                </div>
-                
-                <v-alert
-                  v-if="imageToDelete?.in_use"
-                  type="warning"
-                  variant="tonal"
-                  density="compact"
-                  class="mb-4 text-caption"
-                >
-                  This image is currently in use by one or more containers. Deleting it standardly will fail unless you force it.
-                </v-alert>
 
-                <v-checkbox
-                  v-model="forceDelete"
-                  label="Force delete image (equivalent to rmi -f)"
-                  color="error"
-                  density="compact"
-                  hide-details
-                ></v-checkbox>
-              </v-card-text>
-
-              <v-card-actions class="pa-6 pt-0">
-                <v-spacer></v-spacer>
-                <v-btn variant="text" @click="closeDeleteDialog" :disabled="deleting">Cancel</v-btn>
-                <v-btn
-                  color="error"
-                  variant="flat"
-                  @click="deleteImage"
-                  :loading="deleting"
-                >
-                  Delete
-                </v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-dialog>
+    <!-- Mobile Curated 2-Row Card -->
+    <template #mobile-item="{ item }">
+      <div class="mobile-item-card" style="cursor: default;">
+        <div class="mobile-card-top">
+          <div class="flex-row" style="min-width: 0;">
+            <span class="status-dot" :class="getUpdateDot(item.up_to_date_status)"></span>
+            <span class="mono fw-500 text-1 text-truncate">{{ item.repository.split('@')[0] }}:{{ item.tag.split('@')[0] }}</span>
+          </div>
+          <span class="status-badge">{{ item.in_use ? 'In Use' : 'Unused' }}</span>
+        </div>
+        <div class="mobile-card-bottom">
+          <span><span class="text-3">Node:</span> {{ item.node }}</span>
+          <span><span class="text-3">Size:</span> {{ formatSize(item.size) }}</span>
+        </div>
+      </div>
     </template>
-    <!-- Repository Column (with registry icon) -->
-            <template v-slot:item.repository="{ item }">
-              <div class="d-flex align-center">
-                <v-icon
-                  :icon="getRegistryIcon(item.repository)"
-                  color="primary"
-                  size="20"
-                  class="me-3"
-                ></v-icon>
-                <div class="d-flex flex-column">
-                  <span class="text-body-2 font-weight-bold text-truncate-400" :title="item.repository">
-                    {{ item.repository.split('@')[0] }}
-                  </span>
-                  <span class="text-caption text-grey text-truncate-200 font-mono" :title="item.tag">
-                    {{ item.tag.split('@')[0] }}
-                  </span>
-                </div>
-              </div>
-            </template>
-
-            <!-- SHA Column -->
-            <template v-slot:item.id="{ value }">
-              <code class="font-mono text-caption text-grey" :title="value">
-                {{ value.replace('sha256:', '').substring(0, 12) }}
-              </code>
-            </template>
-
-            <!-- Architecture Column -->
-            <template v-slot:item.architecture="{ value }">
-              <v-chip size="x-small" variant="outlined" color="primary" label class="font-mono text-uppercase">
-                {{ value }}
-              </v-chip>
-            </template>
-
-            <!-- Node Column -->
-            <template v-slot:item.node="{ value }">
-              <code>{{ value }}</code>
-            </template>
-
-            <!-- Size Column -->
-            <template v-slot:item.size="{ value }">
-              <div class="text-end">
-                <span class="text-body-2">{{ formatSize(value) }}</span>
-              </div>
-            </template>
-
-            <!-- In Use Column -->
-            <template v-slot:item.in_use="{ value }">
-              <v-chip
-                size="x-small"
-                :color="value ? 'success' : 'grey'"
-                variant="tonal"
-                label
-              >
-                {{ value ? 'In Use' : 'Unused' }}
-              </v-chip>
-            </template>
-
-            <!-- Actions Column -->
-            <template v-slot:item.actions="{ item }">
-              <div class="d-flex align-center justify-center gap-1">
-                <!-- Delete Action Button -->
-                <v-btn
-                  icon="mdi-delete-outline"
-                  size="x-small"
-                  variant="text"
-                  color="error"
-                  @click="confirmDelete(item)"
-                  title="Delete Image"
-                ></v-btn>
-              </div>
-            </template>
   </DataTablePage>
 </template>
 
 <script setup lang="ts">
-import DataTablePage from "../../components/DataTablePage.vue";
-import { ref, computed, onMounted } from 'vue'
-
-const searchQuery = ref('')
+import { ref, onMounted } from 'vue';
+import DataTablePage from '../../components/DataTablePage.vue';
+import AppModal from '../../components/AppModal.vue';
 
 interface ImageInfo {
-  id: string
-  repository: string
-  tag: string
-  node: string
-  node_id: string
-  size: number
-  architecture: string
-  in_use: boolean
-  created_at: string
-  ui_key?: string
-  // UI states:
-  up_to_date_status?: 'unchecked' | 'checking' | 'yes' | 'no' | 'error'
-  check_error?: string
+  id: string;
+  repository: string;
+  tag: string;
+  node: string;
+  node_id: string;
+  size: number;
+  architecture: string;
+  in_use: boolean;
+  created_at: string;
+  ui_key?: string;
+  up_to_date_status?: 'unchecked' | 'checking' | 'yes' | 'no' | 'error';
+  check_error?: string;
 }
 
-const images = ref<ImageInfo[]>([])
-const loading = ref(false)
-const checkingAll = ref(false)
-
-const deleteDialog = ref(false)
-const deleting = ref(false)
-const imageToDelete = ref<ImageInfo | null>(null)
-const forceDelete = ref(false)
+const images = ref<ImageInfo[]>([]);
+const loading = ref(false);
+const checkingAll = ref(false);
+const deleteDialog = ref(false);
+const deleting = ref(false);
+const imageToDelete = ref<ImageInfo | null>(null);
+const forceDelete = ref(false);
 
 const headers = [
   { title: 'Image Name', key: 'repository', sortable: true, align: 'start' as const },
-  { title: 'SHA', key: 'id', width: '150px', sortable: true, align: 'start' as const },
-  { title: 'Architecture', key: 'architecture', width: '130px', align: 'start' as const },
-  { title: 'Node', key: 'node', sortable: true, align: 'start' as const },
-  { title: 'Size', key: 'size', width: '120px', sortable: true, align: 'end' as const },
-  { title: 'Status', key: 'in_use', width: '120px', sortable: true, align: 'start' as const },
-  { title: 'Actions', key: 'actions', width: '120px', align: 'center' as const, sortable: false },
-]
+  { title: 'SHA', key: 'id', width: '130px', sortable: true, align: 'start' as const },
+  { title: 'Arch', key: 'architecture', width: '100px', align: 'start' as const },
+  { title: 'Node', key: 'node', width: '185px', sortable: true, align: 'start' as const },
+  { title: 'Size', key: 'size', width: '140px', sortable: true, align: 'end' as const },
+  { title: 'Status', key: 'in_use', width: '110px', sortable: true, align: 'start' as const },
+  { title: 'Actions', key: 'actions', width: '80px', align: 'center' as const, sortable: false },
+];
 
-const getRowProps = ({ item }: any) => {
-  let statusClass = 'status-grey'
-  if (item.up_to_date_status === 'yes') {
-    statusClass = 'status-success' // Green for up-to-date
-  } else if (item.up_to_date_status === 'no') {
-    statusClass = 'status-error' // Red for out-of-date
-  } else if (item.up_to_date_status === 'error') {
-    statusClass = 'status-grey' // Grey for error
-  } else {
-    // Unchecked default
-    statusClass = 'status-grey'
-  }
-  return {
-    class: `status-bar-row ${statusClass}`
-  }
-}
+const getUpdateDot = (status?: string) => {
+  if (status === 'yes') return 'dot-ok';
+  if (status === 'no') return 'dot-err';
+  if (status === 'checking') return 'dot-warn';
+  return '';
+};
 
 const fetchImages = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await fetch('/api/images')
+    const response = await fetch('/api/images');
     if (response.ok) {
-      const data = await response.json()
-      images.value = data.map((img: ImageInfo) => ({
+      const data = await response.json();
+      images.value = (data || []).map((img: ImageInfo) => ({
         ...img,
         ui_key: `${img.node_id}-${img.id}-${img.repository}-${img.tag}`,
-        up_to_date_status: 'unchecked'
-      }))
-      // Automatically trigger update check for all images on load
-      checkAllImages()
-    } else {
-      console.error('Failed to fetch images:', await response.text())
+        up_to_date_status: 'unchecked',
+      }));
+      checkAllImages();
     }
   } catch (error) {
-    console.error('Failed to fetch images:', error)
+    console.error('Failed to fetch images:', error);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const checkUpdate = async (item: ImageInfo) => {
-  item.up_to_date_status = 'checking'
+  item.up_to_date_status = 'checking';
   try {
     const response = await fetch(
       `/api/images/check?node_id=${item.node_id}&repository=${encodeURIComponent(item.repository)}&tag=${encodeURIComponent(item.tag)}&id=${item.id}`,
       { method: 'POST' }
-    )
+    );
     if (response.ok) {
-      const data = await response.json()
-      item.up_to_date_status = data.up_to_date ? 'yes' : 'no'
+      const data = await response.json();
+      item.up_to_date_status = data.up_to_date ? 'yes' : 'no';
     } else {
-      const errText = await response.text()
-      item.up_to_date_status = 'error'
-      item.check_error = errText
+      item.up_to_date_status = 'error';
+      item.check_error = await response.text();
     }
   } catch (error: any) {
-    item.up_to_date_status = 'error'
-    item.check_error = error.message || 'Network error'
+    item.up_to_date_status = 'error';
+    item.check_error = error.message || 'Network error';
   }
-}
+};
 
 const checkAllImages = async () => {
-  checkingAll.value = true
-  const targets = images.value.filter(img => img.up_to_date_status !== 'checking')
-  await Promise.all(targets.map(img => checkUpdate(img)))
-  checkingAll.value = false
-}
-
-const getRegistryIcon = (repo: string): string => {
-  const lower = repo.toLowerCase()
-  if (lower.includes('ghcr.io')) return 'mdi-github'
-  if (lower.includes('gcr.io') || lower.includes('pkg.dev')) return 'mdi-google'
-  if (lower.includes('quay.io')) return 'mdi-redhat'
-  if (lower.includes('public.ecr.aws') || lower.includes('.dkr.ecr.')) return 'mdi-aws'
-  if (lower.includes('azurecr.io')) return 'mdi-microsoft-azure'
-  if (lower.includes('gitlab.com')) return 'mdi-gitlab'
-  if (lower.includes('lscr.io')) return 'mdi-linux'
-  return 'mdi-docker' // Default docker hub whale
-}
+  checkingAll.value = true;
+  const targets = images.value.filter((img) => img.up_to_date_status !== 'checking');
+  await Promise.all(targets.map((img) => checkUpdate(img)));
+  checkingAll.value = false;
+};
 
 const formatSize = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
 
 const confirmDelete = (img: ImageInfo) => {
-  imageToDelete.value = img
-  forceDelete.value = false
-  deleteDialog.value = true
-}
+  imageToDelete.value = img;
+  forceDelete.value = false;
+  deleteDialog.value = true;
+};
 
 const closeDeleteDialog = () => {
-  deleteDialog.value = false
-  imageToDelete.value = null
-  forceDelete.value = false
-}
+  deleteDialog.value = false;
+  imageToDelete.value = null;
+  forceDelete.value = false;
+};
 
 const deleteImage = async () => {
-  if (!imageToDelete.value) return
-  deleting.value = true
+  if (!imageToDelete.value) return;
+  deleting.value = true;
   try {
     const response = await fetch(
       `/api/images?node_id=${imageToDelete.value.node_id}&id=${imageToDelete.value.id}&force=${forceDelete.value}`,
       { method: 'DELETE' }
-    )
+    );
     if (response.ok) {
-      await fetchImages()
-      closeDeleteDialog()
+      await fetchImages();
+      closeDeleteDialog();
     } else {
-      const err = await response.text()
-      alert(`Failed to delete image: ${err}`)
+      alert(`Failed to delete image: ${await response.text()}`);
     }
   } catch (error) {
-    console.error('Failed to delete image:', error)
-    alert(`Failed to delete image: ${error}`)
+    alert(`Failed to delete image: ${error}`);
   } finally {
-    deleting.value = false
+    deleting.value = false;
   }
-}
+};
 
-onMounted(fetchImages)
+onMounted(fetchImages);
 </script>

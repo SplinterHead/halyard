@@ -1,125 +1,207 @@
 <template>
-  <v-app id="halyard" class="bg-transparent">
-    <v-navigation-drawer 
+  <v-app id="halyard">
+    <v-navigation-drawer
       v-if="!isAuthPage"
-      v-model="drawer" 
-      :rail="rail"
-      permanent
+      v-model="drawer"
+      :rail="!mobile && rail"
+      :permanent="!mobile"
+      :temporary="mobile"
+      rail-width="56"
+      width="220"
       app
-      class="glass-panel border-e-0"
+      class="app-nav-drawer"
       elevation="0"
     >
       <v-list-item
-        class="py-4 mt-2"
+        class="py-3"
         link
-        @click.stop="rail = !rail"
+        @click.stop="mobile ? (drawer = false) : (rail = !rail)"
       >
         <template v-slot:prepend>
-          <v-avatar size="32" class="ms-n1" rounded="0">
-            <v-img src="/logo.png" contain />
-          </v-avatar>
+          <img src="/logo.png" alt="Halyard" class="rail-brand" />
         </template>
-        <v-list-item-title class="text-h6 font-weight-bold text-gradient ms-2" v-if="!rail">
+        <v-list-item-title
+          v-if="mobile || !rail"
+          class="fw-600 ms-3 text-1"
+          style="font-size: 14px;"
+        >
           Halyard
         </v-list-item-title>
       </v-list-item>
 
-      <v-divider class="my-2 border-opacity-25" color="white"></v-divider>
+      <v-divider style="border-color: var(--border-2); opacity: 1;"></v-divider>
 
-      <v-list density="compact" nav class="px-2">
-        <v-list-item prepend-icon="mdi-view-dashboard-outline" title="Dashboard" to="/" value="dashboard" rounded="lg" class="mb-4"></v-list-item>
+      <v-list density="compact" nav class="px-2 py-2">
+        <v-list-item
+          prepend-icon="mdi-view-dashboard-outline"
+          title="Dashboard"
+          to="/"
+          value="dashboard"
+          rounded="md"
+          class="mb-2"
+        ></v-list-item>
 
-        <v-list-subheader v-if="!rail" class="text-uppercase font-weight-bold text-caption text-primary mb-1">Swarm</v-list-subheader>
-        <v-divider v-else class="my-3 mx-2 border-opacity-25" color="white"></v-divider>
-        
-        <v-list-item prepend-icon="mdi-sitemap-outline" title="Visualizer" to="/swarm/visualizer" value="visualizer" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-monitor-dashboard" title="Nodes" to="/swarm/nodes" value="nodes" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-layers-outline" title="Stacks" to="/swarm/stacks" value="stacks" rounded="lg"></v-list-item>
-        
-        <v-list-item prepend-icon="mdi-server-network" title="Services" to="/swarm/services" value="services" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-docker" title="Containers" to="/swarm/containers" value="containers" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-layers-triple-outline" title="Images" to="/swarm/images" value="images" rounded="lg"></v-list-item>
-        
-        <v-list-item prepend-icon="mdi-database-outline" title="Volumes" to="/swarm/volumes" value="volumes" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-lan" title="Networks" to="/swarm/networks" value="networks" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-code-braces" title="Configs" to="/swarm/variables" value="variables" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-lock-outline" title="Secrets" to="/swarm/secrets" value="secrets" rounded="lg"></v-list-item>
+        <v-list-subheader v-if="mobile || !rail" class="text-uppercase mb-1">Swarm</v-list-subheader>
+        <v-divider v-else class="my-2 mx-2" style="border-color: var(--border-1); opacity: 1;"></v-divider>
 
-        <v-list-subheader v-if="!rail" class="text-uppercase font-weight-bold text-caption text-primary mt-4 mb-1">GitOps</v-list-subheader>
-        <v-divider v-else class="my-3 mx-2 border-opacity-25" color="white"></v-divider>
-        <v-list-item prepend-icon="mdi-git" title="Repositories" to="/git/repositories" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-sync" title="Git Syncs" to="/git/syncs" rounded="lg"></v-list-item>
+        <v-list-item prepend-icon="mdi-sitemap-outline" title="Visualizer" to="/swarm/visualizer" value="visualizer" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-monitor-dashboard" title="Nodes" to="/swarm/nodes" value="nodes" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-layers-outline" title="Stacks" to="/swarm/stacks" value="stacks" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-server-network" title="Services" to="/swarm/services" value="services" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-docker" title="Containers" to="/swarm/containers" value="containers" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-layers-triple-outline" title="Images" to="/swarm/images" value="images" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-database-outline" title="Volumes" to="/swarm/volumes" value="volumes" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-lan" title="Networks" to="/swarm/networks" value="networks" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-code-braces" title="Configs" to="/swarm/variables" value="variables" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-lock-outline" title="Secrets" to="/swarm/secrets" value="secrets" rounded="md"></v-list-item>
 
-        <v-list-subheader v-if="!rail" class="text-uppercase font-weight-bold text-caption text-primary mt-4 mb-1">Settings</v-list-subheader>
-        <v-divider v-else class="my-3 mx-2 border-opacity-25" color="white"></v-divider>
-        <v-list-item prepend-icon="mdi-cog" title="Settings" to="/settings" rounded="lg"></v-list-item>
-        <v-list-item prepend-icon="mdi-database-lock" title="Registries" to="/swarm/registries" rounded="lg"></v-list-item>
+        <v-list-subheader v-if="mobile || !rail" class="text-uppercase mt-3 mb-1">GitOps</v-list-subheader>
+        <v-divider v-else class="my-2 mx-2" style="border-color: var(--border-1); opacity: 1;"></v-divider>
+
+        <v-list-item prepend-icon="mdi-git" title="Repositories" to="/git/repositories" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-sync" title="Git Syncs" to="/git/syncs" rounded="md"></v-list-item>
+
+        <v-list-subheader v-if="mobile || !rail" class="text-uppercase mt-3 mb-1">Settings</v-list-subheader>
+        <v-divider v-else class="my-2 mx-2" style="border-color: var(--border-1); opacity: 1;"></v-divider>
+
+        <v-list-item prepend-icon="mdi-cog" title="Settings" to="/settings" rounded="md"></v-list-item>
+        <v-list-item prepend-icon="mdi-database-lock" title="Registries" to="/swarm/registries" rounded="md"></v-list-item>
       </v-list>
 
-      <!-- Bottom Rail Toggle for convenience -->
       <template v-slot:append>
-        <div v-if="!rail" class="pa-4 text-center">
-          <span class="text-caption text-grey font-mono font-weight-bold">
-            v{{ pkg.version }}
-          </span>
+        <div v-if="mobile || !rail" class="pa-3 text-center">
+          <span class="mono text-3">v{{ pkg.version }}</span>
         </div>
       </template>
     </v-navigation-drawer>
 
-    <v-app-bar v-if="!isAuthPage" flat class="glass-panel border-b-0" elevation="0">
-      <v-app-bar-nav-icon :icon="rail ? 'mdi-menu-close' : 'mdi-menu-open'" @click.stop="rail = !rail" color="white"></v-app-bar-nav-icon>
+    <v-app-bar v-if="!isAuthPage" flat height="48" class="app-top-bar" elevation="0">
+      <div class="d-flex align-center ps-3" style="gap: 10px;">
+        <button
+          type="button"
+          class="topbar-icon-btn"
+          aria-label="Toggle navigation"
+          @click="toggleNav"
+        >
+          <v-icon size="18">{{ !mobile && !rail ? 'mdi-menu-open' : 'mdi-menu' }}</v-icon>
+        </button>
+
+        <router-link v-if="mobile" to="/" class="mobile-brand-link">
+          <img src="/logo.png" alt="Halyard" class="rail-brand" style="width: 24px; height: 24px;" />
+          <span class="fw-600 text-1" style="font-size: 14px;">Halyard</span>
+        </router-link>
+      </div>
+
       <v-spacer></v-spacer>
-      
-      <!-- Premium App Bar Actions -->
-      <div class="d-flex align-center gap-2 pe-4">
+
+      <div class="d-flex align-center pe-4">
         <v-menu>
           <template v-slot:activator="{ props }">
-            <v-avatar v-bind="props" size="36" color="primary" variant="tonal" class="cursor-pointer" style="border: 2px solid rgba(139, 92, 246, 0.5)">
-              <span class="text-caption font-weight-bold">{{ userInitials }}</span>
-            </v-avatar>
+            <button
+              v-bind="props"
+              type="button"
+              class="avatar-btn"
+              aria-label="User menu"
+            >
+              {{ userInitials }}
+            </button>
           </template>
-          <v-list class="mt-2 menu-blur" elevation="8" rounded="lg">
+          <v-list class="mt-2 app-menu-list" density="compact" elevation="0">
             <v-list-item to="/settings/profile" prepend-icon="mdi-account-cog-outline" value="profile">
-              <v-list-item-title class="text-caption">Profile Settings</v-list-item-title>
+              <v-list-item-title style="font-size: 12.5px;">Profile Settings</v-list-item-title>
             </v-list-item>
-            <v-divider class="my-1 border-opacity-25" color="white"></v-divider>
-            <v-list-item @click="handleLogout" prepend-icon="mdi-logout" value="logout">
-              <v-list-item-title class="text-caption text-error">Logout</v-list-item-title>
+            <v-list-item
+              :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+              value="theme-toggle"
+              @click="toggleTheme()"
+            >
+              <v-list-item-title style="font-size: 12.5px;">
+                {{ isDark ? 'Light Theme' : 'Dark Theme' }}
+              </v-list-item-title>
+            </v-list-item>
+            <v-divider class="my-1" style="border-color: var(--border-2); opacity: 1;"></v-divider>
+            <v-list-item prepend-icon="mdi-logout" value="logout" @click="handleLogout">
+              <v-list-item-title class="text-err" style="font-size: 12.5px;">Logout</v-list-item-title>
             </v-list-item>
           </v-list>
         </v-menu>
       </div>
     </v-app-bar>
 
-    <v-main class="bg-transparent">
-      <v-container fluid :class="isAuthPage ? 'pa-0 fill-height justify-center align-center d-flex' : 'pa-6'">
-        <router-view v-slot="{ Component, route }">
-          <v-fade-transition mode="out-in">
-            <div :key="route.path" class="w-100 h-100 d-flex flex-column">
-              <component :is="Component" />
-            </div>
-          </v-fade-transition>
+    <v-main>
+      <div v-if="isAuthPage" class="auth-page-host">
+        <router-view />
+      </div>
+      <div v-else class="view-container">
+        <router-view v-slot="{ Component, route: currentRoute }">
+          <component :is="Component" :key="currentRoute.path" />
         </router-view>
-      </v-container>
+      </div>
     </v-main>
+
+    <v-bottom-navigation
+      v-if="!isAuthPage && mobile"
+      grow
+      height="56"
+      class="app-bottom-nav"
+      elevation="0"
+    >
+      <v-btn to="/" exact>
+        <v-icon size="18">mdi-view-dashboard-outline</v-icon>
+        <span>Cluster</span>
+      </v-btn>
+      <v-btn to="/swarm/stacks">
+        <v-icon size="18">mdi-layers-outline</v-icon>
+        <span>Stacks</span>
+      </v-btn>
+      <v-btn to="/git/syncs">
+        <v-icon size="18">mdi-sync</v-icon>
+        <span>GitOps</span>
+      </v-btn>
+      <v-btn to="/swarm/nodes">
+        <v-icon size="18">mdi-monitor-dashboard</v-icon>
+        <span>Nodes</span>
+      </v-btn>
+      <v-btn @click="drawer = true">
+        <v-icon size="18">mdi-menu</v-icon>
+        <span>More</span>
+      </v-btn>
+    </v-bottom-navigation>
   </v-app>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import pkg from '../package.json'
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useDisplay, useTheme as useVuetifyTheme } from 'vuetify';
+import { useTheme } from './theme';
+import pkg from '../package.json';
 
-const route = useRoute()
-const router = useRouter()
-const drawer = ref(true)
-const rail = ref(true)
-const userInitials = ref('??')
+const route = useRoute();
+const router = useRouter();
+const { mobile } = useDisplay();
+const vuetifyTheme = useVuetifyTheme();
+const { isDark, toggleTheme } = useTheme(vuetifyTheme);
 
-// Check if we are currently on an auth page (Login or Onboarding)
+const drawer = ref(!mobile.value);
+const rail = ref(true);
+const userInitials = ref('??');
+
 const isAuthPage = computed(() => {
-  return route.path === '/login' || route.path === '/onboarding'
-})
+  return route.path === '/login' || route.path === '/onboarding';
+});
+
+const toggleNav = () => {
+  if (mobile.value) {
+    drawer.value = !drawer.value;
+  } else {
+    rail.value = !rail.value;
+  }
+};
+
+watch(mobile, (isMob) => {
+  drawer.value = !isMob;
+});
 
 const loadUser = () => {
   const userStr = localStorage.getItem('halyard_user');
@@ -127,30 +209,35 @@ const loadUser = () => {
     try {
       const user = JSON.parse(userStr);
       if (user.real_name) {
-        userInitials.value = user.real_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
+        userInitials.value = user.real_name
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase();
       } else if (user.username) {
         userInitials.value = user.username.substring(0, 2).toUpperCase();
       }
-      
+
       if (user.preferences) {
         const root = document.documentElement;
         for (const [key, value] of Object.entries(user.preferences)) {
-          if (value) {
+          if (value && key.startsWith('ansi-')) {
             root.style.setProperty(`--${key}`, value as string);
           }
         }
       }
     } catch (e) {
-      console.error("Failed to parse user", e);
+      console.error('Failed to parse user', e);
     }
   }
-}
+};
 
 const handleLogout = () => {
   localStorage.removeItem('halyard_token');
   localStorage.removeItem('halyard_user');
   router.push('/login');
-}
+};
 
 onMounted(() => {
   if (!isAuthPage.value) {
@@ -165,51 +252,55 @@ watch(isAuthPage, (newVal) => {
 });
 </script>
 
-<style>
-/* Prevent the permanent/pinned drawer from shifting the main content abruptly */
-.v-navigation-drawer {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+<style scoped>
+.topbar-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
 }
 
-/* Ensure the drawer stays on top */
-.v-navigation-drawer--permanent {
-  z-index: 100 !important;
+.topbar-icon-btn:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
 }
 
-/* Make V-Main transition smoother */
-.v-main {
-  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+.mobile-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
 }
 
-#halyard {
-  min-height: 100vh;
+.avatar-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
 }
 
-/* Global Status Bar Styles for Tables */
-.v-data-table .status-bar-row td:first-child {
-  border-left: 3px solid var(--status-color, #757575) !important;
-  padding-left: 16px !important;
+.avatar-btn:hover {
+  border-color: var(--accent);
 }
 
-.status-success { --status-color: #4CAF50; }
-.status-error { --status-color: #F44336; }
-.status-warning { --status-color: #FFC107; }
-.status-info { --status-color: #2196F3; }
-.status-grey { --status-color: #757575; }
-
-/* Custom Scrollbar for premium feel */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+.auth-page-host {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-0);
+  padding: 20px;
 }
 </style>

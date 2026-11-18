@@ -1,259 +1,253 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <div class="pa-2 pb-0 d-flex align-center flex-wrap justify-space-between">
-      <h1 class="text-h4 font-weight-bold">Git Repositories</h1>
-      <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          placeholder="Search repositories..."
-          variant="solo-filled"
-          density="compact"
-          flat
-          hide-details
-          rounded="lg"
-          class="search-input glass-input"
-          style="width: 280px"
-        ></v-text-field>
-        <v-btn
-          prepend-icon="mdi-plus"
-          color="primary"
-          @click="openAddDialog"
-          flat
-        >
-          Add Repository
-        </v-btn>
-        <v-btn
-          icon="mdi-refresh"
-          @click="fetchRepos"
-          :loading="loading"
-          size="x-small"
-          class="refresh-btn"
-          flat
-        ></v-btn>
-      </div>
-    </div>
+  <DataTablePage
+    title="Git Repositories"
+    subtitle="Remote Git repositories connected for automated Swarm stack synchronization."
+    :items="repos"
+    :headers="headers"
+    :loading="loading"
+    empty-icon="mdi-git"
+    empty-title="No Repositories Found"
+    empty-description="Add a Git repository to start syncing your stacks with source code and automate your deployments."
+    search-placeholder="Search repositories..."
+    :sort-by="[{ key: 'name', order: 'asc' }]"
+    @refresh="fetchRepos"
+  >
+    <template #actions>
+      <button type="button" class="btn btn-primary" @click="openAddDialog">
+        + Add Repository
+      </button>
+    </template>
 
-    <v-divider class="my-4"></v-divider>
-
-    <Loader :loading="loading" />
-
-    <div v-if="repos.length === 0 && !loading" class="flex-grow-1 d-flex flex-column align-center justify-center">
-      <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-git</v-icon>
-      <h3 class="text-h5 text-grey-darken-1">No Repositories Found</h3>
-      <p class="text-body-1 text-grey-darken-1 mt-2 mb-6 text-center" style="max-width: 500px">
-        Add a Git repository to start syncing your stacks with source code and automate your deployments. Use the button above to add your first repository.
-      </p>
-    </div>
-
-    <div v-else class="flex-grow-1">
-      <v-data-table
-        :headers="headers"
-        :items="repos"
-        :search="searchQuery"
-        :sort-by="[{ key: 'name', order: 'asc' }]"
-        :row-props="getRowProps"
-        class="bg-transparent"
-        density="comfortable"
-        items-per-page="25"
+    <template #top>
+      <!-- Add/Edit Repo Modal -->
+      <AppModal
+        v-model="dialog"
+        :title="`${isEdit ? 'Edit' : 'Add'} Git Repository`"
+        max-width="560px"
+        :persistent="saving"
       >
-        <template v-slot:item.name="{ item }">
-          <div class="d-flex flex-column">
-            <span class="text-body-2 font-weight-bold">{{ item.name }}</span>
-            <span class="text-caption text-grey text-truncate-400" :title="item.description">{{ item.description || 'No description' }}</span>
+        <div class="form-field">
+          <label class="form-label" for="repo-name">Friendly Name</label>
+          <input
+            id="repo-name"
+            v-model="editedRepo.name"
+            type="text"
+            class="form-input"
+            placeholder="e.g. Production Stack"
+          />
+        </div>
+
+        <div class="form-field">
+          <label class="form-label" for="repo-url">Git URL</label>
+          <input
+            id="repo-url"
+            v-model="editedRepo.url"
+            type="text"
+            class="form-input mono"
+            placeholder="https://github.com/org/repo.git"
+          />
+        </div>
+
+        <div class="config-grid">
+          <div class="form-field">
+            <label class="form-label" for="repo-user">Username (Optional)</label>
+            <input
+              id="repo-user"
+              v-model="editedRepo.username"
+              type="text"
+              class="form-input"
+              placeholder="Optional"
+            />
           </div>
-        </template>
-
-        <template v-slot:item.url="{ value }">
-          <div class="d-flex align-center">
-            <v-icon size="16" color="grey" class="me-2">mdi-git</v-icon>
-            <code class="text-caption text-truncate-400" :title="value">{{ value }}</code>
+          <div class="form-field">
+            <label class="form-label" for="repo-token">Token / Password (Optional)</label>
+            <input
+              id="repo-token"
+              v-model="editedRepo.token"
+              type="password"
+              class="form-input"
+              placeholder="Optional"
+            />
           </div>
-        </template>
+        </div>
 
-        <template v-slot:item.created_at="{ value }">
-          <div class="text-end">
-            <RelativeTime :value="value" />
-          </div>
-        </template>
+        <div class="form-field">
+          <label class="form-label" for="repo-desc">Description</label>
+          <textarea
+            id="repo-desc"
+            v-model="editedRepo.description"
+            class="form-textarea"
+            rows="2"
+            style="min-height: 64px;"
+          ></textarea>
+        </div>
 
-        <template v-slot:item.actions="{ item }">
-          <div class="d-flex justify-center">
-            <v-btn
-              icon="mdi-connection"
-              size="x-small"
-              variant="text"
-              color="success"
-              @click="testConnection(item)"
-              :loading="testingId === item.id"
-              class="me-1"
-              title="Test Connection"
-            ></v-btn>
-            <v-btn
-              icon="mdi-pencil-outline"
-              size="x-small"
-              variant="text"
-              color="primary"
-              @click="openEditDialog(item)"
-              class="me-1"
-            ></v-btn>
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              color="error"
-              @click="confirmDelete(item)"
-            ></v-btn>
-          </div>
-        </template>
+        <div v-if="error" class="alert-banner alert-err">
+          <span>{{ error }}</span>
+        </div>
 
-      </v-data-table>
-    </div>
-
-    <!-- Add/Edit Repo Dialog -->
-    <v-dialog v-model="dialog" max-width="600px" persistent>
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2">
-          <span class="text-h5 font-weight-bold">{{ isEdit ? 'Edit' : 'Add' }} Git Repository</span>
-        </v-card-title>
-        
-        <v-card-text class="pa-6 pt-2">
-          <v-form ref="form" v-model="valid">
-            <v-row>
-              <v-col cols="12">
-                <v-text-field
-                  v-model="editedRepo.name"
-                  label="Friendly Name"
-                  placeholder="e.g. Production Stack"
-                  required
-                  :rules="[v => !!v || 'Name is required']"
-                  variant="outlined"
-                  density="comfortable"
-                ></v-text-field>
-              </v-col>
-              
-              <v-col cols="12">
-                <v-text-field
-                  v-model="editedRepo.url"
-                  label="Git URL"
-                  placeholder="https://github.com/org/repo.git"
-                  required
-                  :rules="[v => !!v || 'URL is required']"
-                  variant="outlined"
-                  density="comfortable"
-                ></v-text-field>
-              </v-col>
-
-              <v-col cols="6">
-                <v-text-field
-                  v-model="editedRepo.username"
-                  label="Username"
-                  placeholder="Optional"
-                  variant="outlined"
-                  density="comfortable"
-                ></v-text-field>
-              </v-col>
-
-              <v-col cols="6">
-                <v-text-field
-                  v-model="editedRepo.token"
-                  label="Token / Password"
-                  type="password"
-                  placeholder="Optional"
-                  variant="outlined"
-                  density="comfortable"
-                ></v-text-field>
-              </v-col>
-
-              <v-col cols="12">
-                <v-textarea
-                  v-model="editedRepo.description"
-                  label="Description"
-                  rows="2"
-                  variant="outlined"
-                  density="comfortable"
-                  hide-details
-                ></v-textarea>
-              </v-col>
-            </v-row>
-          </v-form>
-
-          <v-alert
-            v-if="error"
-            type="error"
-            variant="tonal"
-            density="compact"
-            class="mt-4"
-            closable
-            @click:close="error = ''"
-          >
-            {{ error }}
-          </v-alert>
-        </v-card-text>
-
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeDialog" :disabled="saving">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
+        <template #footer>
+          <button type="button" class="btn" :disabled="saving" @click="closeDialog">Cancel</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="saving || !editedRepo.name.trim() || !editedRepo.url.trim()"
             @click="saveRepo"
-            :loading="saving"
-            :disabled="!valid"
           >
-            {{ isEdit ? 'Save' : 'Add' }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+            {{ saving ? 'Saving...' : (isEdit ? 'Save' : 'Add') }}
+          </button>
+        </template>
+      </AppModal>
 
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400px">
-      <v-card border flat class="bg-surface">
-        <v-card-title class="pa-6 pb-2">Delete Repository?</v-card-title>
-        <v-card-text class="pa-6 pt-0">
-          This will also delete all Git Syncs associated with this repository. This action cannot be undone.
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="deleteRepo" :loading="deleting">Delete</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </div>
+      <!-- Delete Confirmation Modal -->
+      <AppModal v-model="deleteDialog" title="Delete Repository?" :persistent="deleting">
+        <p class="text-2" style="margin: 0;">
+          This will also delete all Git Syncs associated with
+          <strong class="text-1">{{ repoToDelete?.name }}</strong>. This action cannot be undone.
+        </p>
+        <template #footer>
+          <button type="button" class="btn" :disabled="deleting" @click="deleteDialog = false">Cancel</button>
+          <button type="button" class="btn btn-danger" :disabled="deleting" @click="deleteRepo">
+            {{ deleting ? 'Deleting...' : 'Delete' }}
+          </button>
+        </template>
+      </AppModal>
+    </template>
+
+    <template #item.name="{ item }">
+      <div class="d-flex flex-column" style="gap: 2px;">
+        <div class="flex-row">
+          <span class="status-dot" :class="item.last_status === 'Failed' ? 'dot-err' : 'dot-ok'"></span>
+          <span class="fw-500 text-1">{{ item.name }}</span>
+        </div>
+        <span class="text-3" style="font-size: 12px; padding-inline-start: 15px; overflow-wrap: anywhere;">
+          {{ item.description || 'No description' }}
+        </span>
+      </div>
+    </template>
+
+    <template #item.url="{ value }">
+      <span class="mono text-2" style="overflow-wrap: anywhere;">
+        {{ value }}
+      </span>
+    </template>
+
+    <template #item.created_at="{ value }">
+      <div class="text-end">
+        <RelativeTime :value="value" />
+      </div>
+    </template>
+
+    <template #item.actions="{ item }">
+      <div class="d-flex justify-center" style="gap: 4px;">
+        <button
+          type="button"
+          class="btn btn-icon btn-sm"
+          title="Test Connection"
+          aria-label="Test Connection"
+          :disabled="testingId === item.id"
+          @click="testConnection(item)"
+        >
+          <v-icon size="15">mdi-connection</v-icon>
+        </button>
+        <button
+          type="button"
+          class="btn btn-icon btn-sm"
+          title="Edit Repository"
+          aria-label="Edit Repository"
+          @click="openEditDialog(item)"
+        >
+          <v-icon size="15">mdi-pencil-outline</v-icon>
+        </button>
+        <button
+          type="button"
+          class="btn btn-icon btn-sm btn-danger-subtle"
+          title="Delete Repository"
+          aria-label="Delete Repository"
+          @click="confirmDelete(item)"
+        >
+          <v-icon size="15">mdi-delete-outline</v-icon>
+        </button>
+      </div>
+    </template>
+
+    <!-- Mobile Curated 2-Row Card -->
+    <template #mobile-item="{ item }">
+      <div class="mobile-item-card" style="cursor: default;">
+        <div class="mobile-card-top">
+          <div class="flex-row" style="min-width: 0;">
+            <span class="status-dot" :class="item.last_status === 'Failed' ? 'dot-err' : 'dot-ok'"></span>
+            <span class="fw-500 text-1 text-truncate">{{ item.name }}</span>
+          </div>
+          <div class="flex-row" style="gap: 4px;">
+            <button
+              type="button"
+              class="btn btn-icon btn-sm"
+              title="Test Connection"
+              aria-label="Test Connection"
+              :disabled="testingId === item.id"
+              @click="testConnection(item)"
+            >
+              <v-icon size="14">mdi-connection</v-icon>
+            </button>
+            <button
+              type="button"
+              class="btn btn-icon btn-sm"
+              title="Edit Repository"
+              aria-label="Edit Repository"
+              @click="openEditDialog(item)"
+            >
+              <v-icon size="14">mdi-pencil-outline</v-icon>
+            </button>
+            <button
+              type="button"
+              class="btn btn-icon btn-sm btn-danger-subtle"
+              title="Delete Repository"
+              aria-label="Delete Repository"
+              @click="confirmDelete(item)"
+            >
+              <v-icon size="14">mdi-delete-outline</v-icon>
+            </button>
+          </div>
+        </div>
+        <div class="mobile-card-bottom">
+          <span class="mono text-truncate">{{ item.url }}</span>
+          <span class="flex-shrink-0">{{ formatRelativeTime(item.created_at || '') }}</span>
+        </div>
+      </div>
+    </template>
+  </DataTablePage>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import Loader from '../../components/Loader.vue'
-import RelativeTime from '../../components/RelativeTime.vue'
-
-const searchQuery = ref('')
+import { ref, onMounted } from 'vue';
+import DataTablePage from '../../components/DataTablePage.vue';
+import AppModal from '../../components/AppModal.vue';
+import RelativeTime from '../../components/RelativeTime.vue';
+import { formatRelativeTime } from '../../utils/time';
 
 interface GitRepo {
-  id?: string
-  name: string
-  url: string
-  username: string
-  token: string
-  description: string
-  last_status: string
-  last_error: string
-  created_at?: string
+  id?: string;
+  name: string;
+  url: string;
+  username: string;
+  token: string;
+  description: string;
+  last_status: string;
+  last_error: string;
+  created_at?: string;
 }
 
-const repos = ref<GitRepo[]>([])
-const loading = ref(false)
-const dialog = ref(false)
-const deleteDialog = ref(false)
-const valid = ref(false)
-const saving = ref(false)
-const deleting = ref(false)
-const isEdit = ref(false)
-const error = ref('')
-const repoToDelete = ref<GitRepo | null>(null)
-const testingId = ref<string | null>(null)
+const repos = ref<GitRepo[]>([]);
+const loading = ref(false);
+const dialog = ref(false);
+const deleteDialog = ref(false);
+const saving = ref(false);
+const deleting = ref(false);
+const isEdit = ref(false);
+const error = ref('');
+const repoToDelete = ref<GitRepo | null>(null);
+const testingId = ref<string | null>(null);
 
 const editedRepo = ref<GitRepo>({
   name: '',
@@ -263,50 +257,46 @@ const editedRepo = ref<GitRepo>({
   description: '',
   last_status: '',
   last_error: '',
-  created_at: ''
-})
-
-const getRowProps = ({ item }: any) => {
-  return {
-    class: `status-bar-row ${item.last_status === "Failed" ? "status-error" : "status-success"}`,
-  };
-};
+  created_at: '',
+});
 
 const headers = [
-  { title: "Repository", key: "name", sortable: true, align: "start" as const },
-  { title: "URL", key: "url", sortable: true, align: "start" as const },
-  { title: "Created", key: "created_at", width: "200px", align: "end" as const },
-  { title: "Actions", key: "actions", width: "120px", align: "center" as const, sortable: false },
+  { title: 'Repository', key: 'name', sortable: true, align: 'start' as const },
+  { title: 'URL', key: 'url', minWidth: '280px', sortable: true, align: 'start' as const },
+  { title: 'Created', key: 'created_at', width: '140px', align: 'end' as const },
+  { title: 'Actions', key: 'actions', width: '120px', align: 'center' as const, sortable: false },
 ];
 
 const fetchRepos = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await fetch('/api/repos')
-    repos.value = await response.json()
-  } catch (error) {
-    console.error('Failed to fetch repos:', error)
+    const response = await fetch('/api/repos');
+    if (response.ok) {
+      repos.value = (await response.json()) || [];
+    }
+  } catch (err) {
+    console.error('Failed to fetch repos:', err);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const openAddDialog = () => {
-  isEdit.value = false
-  resetEditedRepo()
-  dialog.value = true
-}
+  isEdit.value = false;
+  resetEditedRepo();
+  dialog.value = true;
+};
 
 const openEditDialog = (repo: GitRepo) => {
-  isEdit.value = true
-  editedRepo.value = { ...repo }
-  dialog.value = true
-}
+  isEdit.value = true;
+  editedRepo.value = { ...repo };
+  dialog.value = true;
+};
 
 const confirmDelete = (repo: GitRepo) => {
-  repoToDelete.value = repo
-  deleteDialog.value = true
-}
+  repoToDelete.value = repo;
+  deleteDialog.value = true;
+};
 
 const resetEditedRepo = () => {
   editedRepo.value = {
@@ -317,89 +307,81 @@ const resetEditedRepo = () => {
     description: '',
     last_status: '',
     last_error: '',
-    created_at: ''
-  }
-}
+    created_at: '',
+  };
+};
 
 const saveRepo = async () => {
-  saving.value = true
-  error.value = ''
+  if (!editedRepo.value.name.trim() || !editedRepo.value.url.trim()) return;
+  saving.value = true;
+  error.value = '';
   try {
-    const url = isEdit.value ? `/api/repos/${editedRepo.value.id}` : '/api/repos'
-    const method = isEdit.value ? 'PUT' : 'POST'
-    
-    const payload = { ...editedRepo.value }
+    const url = isEdit.value ? `/api/repos/${editedRepo.value.id}` : '/api/repos';
+    const method = isEdit.value ? 'PUT' : 'POST';
+    const payload = { ...editedRepo.value };
     if (!isEdit.value) {
-      delete payload.id
-      delete (payload as any).created_at
+      delete payload.id;
+      delete payload.created_at;
     }
 
     const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    
-    const result = await response.json()
-    
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
     if (result.last_status === 'Failed') {
-      error.value = result.last_error || 'Connection failed'
-      await fetchRepos()
-      return
+      error.value = result.last_error || 'Connection failed';
+      await fetchRepos();
+      return;
     }
-    
-    await fetchRepos()
-    closeDialog()
+
+    await fetchRepos();
+    closeDialog();
   } catch (err: any) {
-    error.value = err.message
+    error.value = err.message;
   } finally {
-    saving.value = false
+    saving.value = false;
   }
-}
+};
 
 const deleteRepo = async () => {
-  if (!repoToDelete.value) return
-  deleting.value = true
+  if (!repoToDelete.value) return;
+  deleting.value = true;
   try {
     const response = await fetch(`/api/repos/${repoToDelete.value.id}`, {
-      method: 'DELETE'
-    })
+      method: 'DELETE',
+    });
     if (response.ok) {
-      await fetchRepos()
-      deleteDialog.value = false
+      await fetchRepos();
+      deleteDialog.value = false;
     }
   } catch (err) {
-    console.error('Failed to delete repo:', err)
+    console.error('Failed to delete repo:', err);
   } finally {
-    deleting.value = false
+    deleting.value = false;
   }
-}
+};
 
 const closeDialog = () => {
-  dialog.value = false
-  error.value = ''
-  resetEditedRepo()
-}
+  dialog.value = false;
+  error.value = '';
+  resetEditedRepo();
+};
 
 const testConnection = async (repo: GitRepo) => {
-  if (!repo.id) return
-  testingId.value = repo.id
+  if (!repo.id) return;
+  testingId.value = repo.id;
   try {
-    const response = await fetch(`/api/repos/${repo.id}/test`, {
-      method: "POST",
-    });
-    if (!response.ok) {
-      const err = await response.text();
-      // We don't alert here because the status row will turn red and show the error on next fetch
-    }
+    await fetch(`/api/repos/${repo.id}/test`, { method: 'POST' });
     await fetchRepos();
   } catch (err) {
-    console.error("Failed to test connection:", err);
+    console.error('Failed to test connection:', err);
   } finally {
     testingId.value = null;
   }
 };
 
-onMounted(fetchRepos)
+onMounted(fetchRepos);
 </script>
-

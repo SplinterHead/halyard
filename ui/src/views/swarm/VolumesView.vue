@@ -1,6 +1,7 @@
 <template>
   <DataTablePage
     title="Swarm Volumes"
+    subtitle="Persistent storage volumes across cluster nodes and active mount status."
     :items="volumes"
     :headers="headers"
     :loading="loading"
@@ -9,299 +10,255 @@
     empty-description="Volumes created by your services or manually will appear here once detected."
     search-placeholder="Search volumes..."
     :sort-by="[{ key: 'name', order: 'asc' }]"
-    :row-props="getRowProps"
     @refresh="fetchVolumes"
   >
-    <template v-slot:actions>
-      <v-btn
-          prepend-icon="mdi-broom"
-          color="error"
-          variant="tonal"
-          @click="showPruneDialog = true"
-          :loading="pruning"
+    <template #actions>
+      <button type="button" class="btn btn-danger-subtle" :disabled="pruning" @click="showPruneDialog = true">
+        {{ pruning ? 'Pruning...' : 'Prune Unused' }}
+      </button>
+    </template>
+
+    <template #top>
+      <AppModal v-model="showPruneDialog" title="Prune Unused Volumes?" :persistent="pruning">
+        <p class="text-2" style="margin: 0;">
+          This will remove ALL volumes on ALL nodes that are not currently used by at least one container.
+          This action cannot be undone.
+        </p>
+        <template #footer>
+          <button type="button" class="btn" :disabled="pruning" @click="showPruneDialog = false">Cancel</button>
+          <button type="button" class="btn btn-danger" :disabled="pruning" @click="pruneVolumes">
+            {{ pruning ? 'Pruning...' : 'Prune Volumes' }}
+          </button>
+        </template>
+      </AppModal>
+
+      <AppModal v-model="deleteDialog" title="Delete Volume?" :persistent="deleting">
+        <p class="text-2" style="margin: 0;">
+          Are you sure you want to remove the volume
+          <strong class="text-1 mono">{{ volumeToDelete?.name }}</strong>
+          on node <strong class="text-1">{{ volumeToDelete?.node }}</strong>? This action cannot be undone.
+        </p>
+        <template #footer>
+          <button type="button" class="btn" :disabled="deleting" @click="deleteDialog = false">Cancel</button>
+          <button type="button" class="btn btn-danger" :disabled="deleting" @click="deleteVolume">
+            {{ deleting ? 'Removing...' : 'Remove Volume' }}
+          </button>
+        </template>
+      </AppModal>
+
+      <AppModal v-model="errorDialog" title="Volume Deletion Failed">
+        <p class="text-2" style="margin: 0;">
+          The volume could not be deleted. This usually happens if it is still being used by one or more containers on the node.
+        </p>
+        <pre class="log-viewport text-err" style="margin: 0; white-space: pre-wrap;">{{ errorMessage }}</pre>
+        <template #footer>
+          <button type="button" class="btn btn-primary" @click="errorDialog = false">Dismiss</button>
+        </template>
+      </AppModal>
+
+      <VolumeExplorerDialog
+        v-model="explorerDialog"
+        :volume-name="selectedVolumeName"
+        :node-name="selectedNodeName"
+      />
+    </template>
+
+    <template #item.name="{ item }">
+      <div class="flex-row" style="min-width: 0;">
+        <span class="status-dot" :class="item.in_use ? 'dot-ok' : ''"></span>
+        <span class="fw-500 text-1 text-truncate" style="max-width: 520px;" :title="item.name">{{ item.name }}</span>
+      </div>
+    </template>
+
+    <template #item.node="{ value }">
+      <span class="text-2 text-truncate d-inline-block" style="max-width: 170px;" :title="value">{{ value }}</span>
+    </template>
+
+    <template #item.stack="{ value }">
+      <span v-if="value && value !== '-'" class="status-badge">{{ value }}</span>
+      <span v-else class="text-3">—</span>
+    </template>
+
+    <template #item.driver="{ value }">
+      <span class="status-badge">{{ value }}</span>
+    </template>
+
+    <template #item.type="{ value }">
+      <span class="status-badge">{{ value }}</span>
+    </template>
+
+    <template #item.created_at="{ value }">
+      <div class="text-end">
+        <RelativeTime :value="value" />
+      </div>
+    </template>
+
+    <template #item.actions="{ item }">
+      <div class="d-flex justify-center" style="gap: 4px;">
+        <button
+          type="button"
+          class="btn btn-icon btn-sm"
+          title="Browse Volume Files"
+          aria-label="Browse Volume Files"
+          @click.stop="openExplorer(item)"
         >
-          Prune Unused
-        </v-btn>
+          <v-icon size="15">mdi-folder-search-outline</v-icon>
+        </button>
+        <button
+          type="button"
+          class="btn btn-icon btn-sm btn-danger-subtle"
+          title="Delete Volume"
+          aria-label="Delete Volume"
+          @click.stop="confirmDelete(item)"
+        >
+          <v-icon size="15">mdi-delete-outline</v-icon>
+        </button>
+      </div>
     </template>
-    <template v-slot:top>
-      <v-dialog v-model="showPruneDialog" max-width="500">
-            <v-card>
-              <v-card-title class="text-h5">Prune Unused Volumes?</v-card-title>
-              <v-card-text>
-                This will remove ALL volumes on ALL nodes that are not currently used by at least one container.
-                This action cannot be undone.
-              </v-card-text>
-              <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn color="grey-darken-1" variant="text" @click="showPruneDialog = false">Cancel</v-btn>
-                <v-btn color="error" variant="flat" @click="pruneVolumes" :loading="pruning">Prune Volumes</v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-dialog>
-      <v-dialog v-model="deleteDialog" max-width="450px">
-            <v-card border flat class="bg-surface">
-              <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
-                <v-icon color="error" class="me-2">mdi-alert-decagram</v-icon>
-                Delete Volume?
-              </v-card-title>
-              <v-card-text class="pa-6 pt-2">
-                Are you sure you want to remove the volume <strong class="font-mono text-error">{{ volumeToDelete?.name }}</strong> on node <strong>{{ volumeToDelete?.node }}</strong>? This action cannot be undone.
-              </v-card-text>
-              <v-card-actions class="pa-6 pt-0">
-                <v-spacer></v-spacer>
-                <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-                <v-btn
-                  color="error"
-                  variant="flat"
-                  @click="deleteVolume"
-                  :loading="deleting"
-                >Remove Volume</v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-dialog>
-      <v-dialog v-model="errorDialog" max-width="500px">
-            <v-card border flat class="bg-surface">
-              <v-card-title class="pa-6 pb-2 text-error d-flex align-center">
-                <v-icon color="error" class="me-2">mdi-alert-circle</v-icon>
-                Volume Deletion Failed
-              </v-card-title>
-              <v-card-text class="pa-6 pt-0">
-                <p class="mb-4">The volume could not be deleted. This usually happens if it is still being used by one or more containers on the node.</p>
-                <div class="bg-black bg-opacity-20 pa-4 rounded-lg font-mono text-caption text-error border border-error border-opacity-20">
-                  {{ errorMessage }}
-                </div>
-              </v-card-text>
-              <v-card-actions class="pa-6 pt-0">
-                <v-spacer></v-spacer>
-                <v-btn variant="flat" color="primary" @click="errorDialog = false">Dismiss</v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-dialog>
+
+    <!-- Mobile Curated 2-Row Card -->
+    <template #mobile-item="{ item }">
+      <div class="mobile-item-card" style="cursor: default;">
+        <div class="mobile-card-top">
+          <div class="flex-row" style="min-width: 0;">
+            <span class="status-dot" :class="item.in_use ? 'dot-ok' : ''"></span>
+            <span class="fw-500 text-1 text-truncate">{{ item.name }}</span>
+          </div>
+          <div class="flex-row" style="gap: 4px;">
+            <button
+              type="button"
+              class="btn btn-icon btn-sm"
+              title="Browse Volume Files"
+              aria-label="Browse Volume Files"
+              @click.stop="openExplorer(item)"
+            >
+              <v-icon size="14">mdi-folder-search-outline</v-icon>
+            </button>
+            <button
+              type="button"
+              class="btn btn-icon btn-sm btn-danger-subtle"
+              title="Delete Volume"
+              aria-label="Delete Volume"
+              @click.stop="confirmDelete(item)"
+            >
+              <v-icon size="14">mdi-delete-outline</v-icon>
+            </button>
+          </div>
+        </div>
+        <div class="mobile-card-bottom">
+          <span><span class="text-3">Node:</span> {{ item.node }}</span>
+          <span><span class="text-3">Type:</span> {{ item.type }}</span>
+        </div>
+      </div>
     </template>
-    <template v-slot:item.name="{ item }">
-              <span class="text-body-2 font-weight-bold" :title="item.name">
-                {{ item.name }}
-              </span>
-            </template>
-
-            <template v-slot:item.stack="{ value }">
-              <v-chip v-if="value !== '-'" size="x-small" variant="tonal" color="primary" label>
-                {{ value }}
-              </v-chip>
-              <span v-else class="text-caption text-grey-lighten-1">-</span>
-            </template>
-
-
-            <template v-slot:item.driver="{ value }">
-              <v-chip
-                :color="getDriverColor(value)"
-                size="x-small"
-                label
-                class="text-uppercase font-weight-bold"
-              >
-                {{ value }}
-              </v-chip>
-            </template>
-
-            <template v-slot:item.type="{ value }">
-              <v-chip
-                :color="getTypeColor(value)"
-                size="x-small"
-                label
-                class="text-uppercase font-weight-bold"
-              >
-                {{ value }}
-              </v-chip>
-            </template>
-
-            <template v-slot:item.node="{ value }">
-              <code>{{ value }}</code>
-            </template>
-
-            <template v-slot:item.created_at="{ value }">
-              <div class="text-end">
-                <RelativeTime :value="value" />
-              </div>
-            </template>
-
-            <template v-slot:item.actions="{ item }">
-              <div class="d-flex justify-center align-center">
-                <v-btn
-                  icon="mdi-folder-search-outline"
-                  size="x-small"
-                  variant="text"
-                  color="primary"
-                  class="mr-2"
-                  @click.stop="openExplorer(item)"
-                  title="Browse Volume Files"
-                ></v-btn>
-                <v-btn
-                  icon="mdi-delete-outline"
-                  size="x-small"
-                  variant="text"
-                  color="error"
-                  @click.stop="confirmDelete(item)"
-                  title="Delete Volume"
-                ></v-btn>
-              </div>
-            </template>
   </DataTablePage>
 </template>
 
 <script setup lang="ts">
-import DataTablePage from "../../components/DataTablePage.vue";
-import { ref, onMounted } from 'vue'
-import RelativeTime from '../../components/RelativeTime.vue'
-
-const searchQuery = ref('')
-import VolumeExplorerDialog from '../../components/VolumeExplorerDialog.vue'
+import { ref, onMounted } from 'vue';
+import DataTablePage from '../../components/DataTablePage.vue';
+import AppModal from '../../components/AppModal.vue';
+import RelativeTime from '../../components/RelativeTime.vue';
+import VolumeExplorerDialog from '../../components/VolumeExplorerDialog.vue';
 
 interface Volume {
-  name: string
-  node: string
-  stack: string
-  driver: string
-  type: string
-  in_use: boolean
-  created_at: string
-  labels: Record<string, string>
+  name: string;
+  node: string;
+  stack: string;
+  driver: string;
+  type: string;
+  in_use: boolean;
+  created_at: string;
+  labels: Record<string, string>;
 }
 
-const volumes = ref<Volume[]>([])
-const loading = ref(false)
-const pruning = ref(false)
-const showPruneDialog = ref(false)
-
-const deleteDialog = ref(false)
-const deleting = ref(false)
-const volumeToDelete = ref<Volume | null>(null)
-const errorDialog = ref(false)
-const errorMessage = ref('')
-
-const explorerDialog = ref(false)
-const selectedVolumeName = ref('')
-const selectedNodeName = ref('')
-
-const getRowProps = ({ item }: any) => {
-  return {
-    class: `status-bar-row ${item.in_use ? "status-success" : "status-grey"}`,
-  };
-};
+const volumes = ref<Volume[]>([]);
+const loading = ref(false);
+const pruning = ref(false);
+const showPruneDialog = ref(false);
+const deleteDialog = ref(false);
+const deleting = ref(false);
+const volumeToDelete = ref<Volume | null>(null);
+const errorDialog = ref(false);
+const errorMessage = ref('');
+const explorerDialog = ref(false);
+const selectedVolumeName = ref('');
+const selectedNodeName = ref('');
 
 const headers = [
-  { title: "Volume / ID", key: "name", sortable: true, align: "start" as const },
-  {
-    title: "Node",
-    key: "node",
-    sortable: true,
-    align: "start" as const,
-  },
-  {
-    title: "Stack",
-    key: "stack",
-    sortable: true,
-    width: "150px",
-    align: "start" as const,
-  },
-  { title: "Driver", key: "driver", width: "150px", align: "start" as const },
-  { title: "Type", key: "type", width: "150px", align: "start" as const },
-  {
-    title: "Created",
-    key: "created_at",
-    width: "150px",
-    align: "end" as const,
-  },
-  {
-    title: "Actions",
-    key: "actions",
-    width: "80px",
-    align: "center" as const,
-    sortable: false,
-  },
+  { title: 'Volume / ID', key: 'name', sortable: true, align: 'start' as const },
+  { title: 'Node', key: 'node', width: '185px', sortable: true, align: 'start' as const },
+  { title: 'Stack', key: 'stack', sortable: true, width: '150px', align: 'start' as const },
+  { title: 'Driver', key: 'driver', width: '110px', align: 'start' as const },
+  { title: 'Type', key: 'type', width: '110px', align: 'start' as const },
+  { title: 'Created', key: 'created_at', width: '130px', align: 'end' as const },
+  { title: 'Actions', key: 'actions', width: '90px', align: 'center' as const, sortable: false },
 ];
 
-const getTypeColor = (type: string) => {
-  switch (type.toLowerCase()) {
-    case 'local': return 'grey'
-    case 'nfs': return 'info'
-    case 'gluster': return 'primary'
-    default: return 'secondary'
-  }
-}
-
-const getDriverColor = (driver: string) => {
-  switch (driver.toLowerCase()) {
-    case 'local': return 'grey'
-    default: return 'primary'
-  }
-}
-
 const pruneVolumes = async () => {
-  pruning.value = true
-  showPruneDialog.value = false
+  pruning.value = true;
+  showPruneDialog.value = false;
   try {
-    const response = await fetch('/api/volumes/prune', { method: 'POST' })
+    const response = await fetch('/api/volumes/prune', { method: 'POST' });
     if (response.ok) {
-      await fetchVolumes()
+      await fetchVolumes();
     }
   } catch (error) {
-    console.error('Failed to prune volumes:', error)
+    console.error('Failed to prune volumes:', error);
   } finally {
-    pruning.value = false
+    pruning.value = false;
   }
-}
+};
 
 const fetchVolumes = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await fetch('/api/volumes')
-    const data = await response.json()
-    // Filter out blank rows (no name or node)
-    volumes.value = data.filter((v: Volume) => v.name && v.node)
+    const response = await fetch('/api/volumes');
+    if (response.ok) {
+      const data = await response.json();
+      volumes.value = (data || []).filter((v: Volume) => v.name && v.node);
+    }
   } catch (error) {
-    console.error('Failed to fetch volumes:', error)
+    console.error('Failed to fetch volumes:', error);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const confirmDelete = (volume: Volume) => {
-  volumeToDelete.value = volume
-  deleteDialog.value = true
-}
+  volumeToDelete.value = volume;
+  deleteDialog.value = true;
+};
 
 const openExplorer = (volume: Volume) => {
-  selectedVolumeName.value = volume.name
-  selectedNodeName.value = volume.node
-  explorerDialog.value = true
-}
+  selectedVolumeName.value = volume.name;
+  selectedNodeName.value = volume.node;
+  explorerDialog.value = true;
+};
 
 const deleteVolume = async () => {
-  if (!volumeToDelete.value) return
-  deleting.value = true
+  if (!volumeToDelete.value) return;
+  deleting.value = true;
   try {
-    const response = await fetch(`/api/volumes?node=${encodeURIComponent(volumeToDelete.value.node)}&name=${encodeURIComponent(volumeToDelete.value.name)}`, {
-      method: 'DELETE'
-    })
-
+    const response = await fetch(
+      `/api/volumes?node=${encodeURIComponent(volumeToDelete.value.node)}&name=${encodeURIComponent(volumeToDelete.value.name)}`,
+      { method: 'DELETE' }
+    );
     if (response.ok) {
-      await fetchVolumes()
-      deleteDialog.value = false
+      await fetchVolumes();
+      deleteDialog.value = false;
     } else {
-      const err = await response.text()
-      errorMessage.value = err
-      errorDialog.value = true
+      errorMessage.value = await response.text();
+      errorDialog.value = true;
     }
   } catch (err) {
-    console.error('Failed to delete volume:', err)
-    errorMessage.value = String(err)
-    errorDialog.value = true
+    errorMessage.value = String(err);
+    errorDialog.value = true;
   } finally {
-    deleting.value = false
-    volumeToDelete.value = null
+    deleting.value = false;
+    volumeToDelete.value = null;
   }
-}
+};
 
-onMounted(fetchVolumes)
+onMounted(fetchVolumes);
 </script>
-

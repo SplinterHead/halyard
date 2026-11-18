@@ -1,459 +1,361 @@
 <template>
-  <div class="fill-height d-flex flex-column">
-    <!-- Header Section -->
-    <div class="pa-4 d-flex align-center">
-      <v-btn icon="mdi-arrow-left" @click="$router.back()" variant="text" class="me-2"></v-btn>
-      <div>
-        <h1 class="text-h4 font-weight-bold">{{ node?.hostname || 'Node Detail' }}</h1>
-        <div class="d-flex align-center mt-1">
-          <v-chip size="x-small" :color="statusColor" class="text-uppercase">{{ node?.status }}</v-chip>
-          <span class="text-caption text-grey ms-2"><code>{{ node?.node_id }}</code></span>
+  <div class="section-block" style="gap: 24px;">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="status-line">
+          <button type="button" class="section-link" @click="$router.push('/swarm/nodes')">
+            ← Nodes
+          </button>
         </div>
-        
-        <div class="d-flex align-center mt-2 flex-wrap gap-2">
-          <!-- Subtitle Labels -->
-          <div v-for="(val, key) in node?.labels" :key="key" class="label-chip-mini label-chip-hover">
-            <span class="label-key-mini">{{ key }}</span>
-            <span class="label-val-mini">{{ val }}</span>
-            <v-btn
-              icon="mdi-close-circle"
-              size="x-small"
-              variant="text"
-              color="error"
-              class="delete-label-btn"
-              @click="confirmDeleteLabel(key)"
-            ></v-btn>
-          </div>
-
-          <!-- Add Label Button -->
-          <v-btn
-            size="x-small"
-            variant="tonal"
-            color="primary"
-            prepend-icon="mdi-plus"
-            class="rounded-sm px-2"
-            height="18"
-            style="font-size: 10px; text-transform: none"
-            @click="showAddLabel = true"
-          >
-            Add Label
-          </v-btn>
-        </div>
+        <h1 class="page-title">
+          <span>{{ node?.hostname || 'Node Detail' }}</span>
+          <span v-if="node" class="status-badge">
+            <span class="status-dot" :class="node.status === 'ready' ? 'dot-ok' : 'dot-err'"></span>
+            {{ formatLabel(node.status) }}
+          </span>
+          <span v-if="node" class="status-badge">{{ formatLabel(node.role) }}</span>
+          <span v-if="node" class="status-badge">
+            <span class="status-dot" :class="node.availability === 'active' ? 'dot-ok' : (node.availability === 'drain' ? 'dot-err' : 'dot-warn')"></span>
+            {{ formatLabel(node.availability) }}
+          </span>
+        </h1>
+        <p v-if="node" class="page-subtitle mono">{{ node.node_id }}</p>
       </div>
-      <v-spacer></v-spacer>
-      <div v-if="node" class="d-flex align-center gap-2 flex-wrap">
-        <!-- Availability Chip -->
-        <v-chip size="small" variant="tonal" :color="availabilityColor" prepend-icon="mdi-layers-outline" class="text-uppercase font-weight-bold">
-          {{ node.availability }}
-        </v-chip>
 
-        <!-- Role Chip -->
-        <v-chip size="small" variant="tonal" color="primary" prepend-icon="mdi-shield-check" class="text-uppercase font-weight-bold">
-          {{ node.role }}
-        </v-chip>
-
-        <v-divider vertical class="mx-2" style="height: 24px; opacity: 0.2"></v-divider>
-
-        <!-- Action: Drain / Activate -->
-        <v-btn
+      <div v-if="node" class="header-actions">
+        <button
           v-if="node.availability === 'active'"
-          size="small"
-          color="warning"
-          variant="tonal"
-          prepend-icon="mdi-arrow-down-bold-circle-outline"
-          class="rounded-sm"
+          type="button"
+          class="btn"
           @click="triggerSwarmAction('drain')"
         >
           Drain
-        </v-btn>
-        <v-btn
+        </button>
+        <button
           v-else-if="node.availability === 'drain'"
-          size="small"
-          color="success"
-          variant="tonal"
-          prepend-icon="mdi-arrow-up-bold-circle-outline"
-          class="rounded-sm"
+          type="button"
+          class="btn btn-primary"
           @click="triggerSwarmAction('activate')"
         >
           Activate
-        </v-btn>
+        </button>
 
-        <!-- Action: Promote / Demote -->
-        <v-btn
+        <button
           v-if="node.role === 'worker'"
-          size="small"
-          color="info"
-          variant="tonal"
-          prepend-icon="mdi-security"
-          class="rounded-sm"
+          type="button"
+          class="btn"
           @click="triggerSwarmAction('promote')"
         >
           Promote
-        </v-btn>
-        <v-btn
+        </button>
+        <button
           v-else-if="node.role === 'manager'"
-          size="small"
-          color="error"
-          variant="tonal"
-          prepend-icon="mdi-shield-alert"
-          class="rounded-sm"
+          type="button"
+          class="btn"
           @click="triggerSwarmAction('demote')"
         >
           Demote
-        </v-btn>
+        </button>
 
-        <!-- Action: Reboot -->
-        <v-divider vertical class="mx-2" style="height: 24px; opacity: 0.2"></v-divider>
-        <v-btn
-          size="small"
-          color="error"
-          variant="tonal"
-          prepend-icon="mdi-restart"
-          class="rounded-sm"
-          @click="rebootDialog.show = true"
-        >
+        <button type="button" class="btn btn-danger-subtle" @click="rebootDialog.show = true">
           Reboot
-        </v-btn>
+        </button>
+        <button type="button" class="btn btn-icon" :disabled="loading" aria-label="Refresh" @click="fetchNodeDetail">
+          <v-icon size="16">mdi-refresh</v-icon>
+        </button>
       </div>
     </div>
 
-    <!-- Confirm Delete Label Dialog -->
-    <v-dialog v-model="showConfirmDelete" max-width="400">
-      <v-card class="solid-card pa-6">
-        <v-card-title class="text-h6 font-weight-bold px-0 pb-4">Delete Label</v-card-title>
-        <v-card-text class="pa-0 text-body-1">
-          Are you sure you want to delete the label <strong>{{ labelToDelete }}</strong>?
-        </v-card-text>
-        <v-card-actions class="px-0 pt-6">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" color="grey" @click="showConfirmDelete = false">Cancel</v-btn>
-          <v-btn
-            variant="flat"
-            color="error"
-            :loading="deletingLabel"
-            @click="deleteLabel"
-          >Delete Label</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Add Label Dialog -->
-    <v-dialog v-model="showAddLabel" max-width="400">
-      <v-card class="solid-card pa-6">
-        <v-card-title class="text-h6 font-weight-bold px-0 pb-4">Add Node Label</v-card-title>
-        <v-card-text class="pa-0">
-          <v-text-field
-            v-model="newLabel.key"
-            label="Key"
-            variant="outlined"
-            density="comfortable"
-            color="primary"
-            class="mb-2"
-            hide-details
-            placeholder="e.g. env"
-          ></v-text-field>
-          <v-text-field
-            v-model="newLabel.value"
-            label="Value (optional)"
-            variant="outlined"
-            density="comfortable"
-            color="primary"
-            hide-details
-            placeholder="e.g. production"
-          ></v-text-field>
-        </v-card-text>
-        <v-card-actions class="px-0 pt-6">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" color="grey" @click="showAddLabel = false">Cancel</v-btn>
-          <v-btn
-            variant="flat"
-            color="primary"
-            :loading="savingLabel"
-            :disabled="!newLabel.key"
-            @click="saveLabel"
-          >Add Label</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Confirm Swarm Action Dialog -->
-    <v-dialog v-model="confirmDialog.show" max-width="400">
-      <v-card class="solid-card pa-6">
-        <v-card-title class="text-h6 font-weight-bold px-0 pb-4">{{ confirmDialog.title }}</v-card-title>
-        <v-card-text class="pa-0 text-body-1">
-          {{ confirmDialog.text }}
-        </v-card-text>
-        <v-card-actions class="px-0 pt-6">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" color="grey" @click="confirmDialog.show = false">Cancel</v-btn>
-          <v-btn
-            variant="flat"
-            :color="confirmDialog.color"
-            :loading="updatingNode"
-            @click="executeSwarmAction"
-          >{{ confirmDialog.actionText }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Reboot Confirmation Dialog -->
-    <v-dialog v-model="rebootDialog.show" max-width="450">
-      <v-card class="solid-card pa-6">
-        <v-card-title class="text-h6 font-weight-bold px-0 pb-4">Reboot Node</v-card-title>
-        <v-card-text class="pa-0 text-body-1">
-          Are you sure you want to reboot node <code>{{ node?.hostname }}</code>? 
-          <br><br>
-          We recommend draining the node first to safely reschedule its active containers.
-        </v-card-text>
-        <v-card-actions class="px-0 pt-6">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" color="grey" @click="rebootDialog.show = false">Cancel</v-btn>
-          <v-btn
-            variant="tonal"
-            color="error"
-            :loading="isRebootingHost && !rebootDialog.draining"
-            @click="executeHostReboot(false)"
-          >Reboot Immediately</v-btn>
-          <v-btn
-            variant="flat"
-            color="warning"
-            :loading="isRebootingHost && rebootDialog.draining"
-            @click="executeHostReboot(true)"
-          >Drain & Reboot</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Interactive Update Dialog -->
-    <v-dialog v-model="updateDialog.show" max-width="500" persistent>
-      <v-card class="solid-card pa-6">
-        <v-card-title class="text-h6 font-weight-bold px-0 pb-4 d-flex align-center justify-space-between">
-          <span>Run System Updates</span>
-          <v-btn icon="mdi-close" variant="text" size="small" @click="closeUpdateDialog" :disabled="updateDialog.updating"></v-btn>
-        </v-card-title>
-        <v-card-text class="pa-0">
-          <v-alert v-if="updateDialog.error" type="error" variant="tonal" class="mb-4 text-body-2">
-            {{ updateDialog.error }}
-          </v-alert>
-          
-          <div v-if="updateDialog.loading" class="d-flex flex-column align-center justify-center py-8">
-            <v-progress-circular indeterminate color="primary" class="mb-4"></v-progress-circular>
-            <span class="text-grey text-body-2">Fetching pending packages...</span>
-          </div>
-          
-          <div v-else-if="updateDialog.packages.length === 0" class="text-center py-4 text-grey">
-            No packages found.
-          </div>
-          
-          <v-list v-else class="bg-transparent" density="compact">
-            <v-list-item v-for="(pkg, idx) in updateDialog.packages" :key="idx" class="px-0">
-              <template v-slot:prepend>
-                <v-icon v-if="pkg.status === 'pending'" color="success" icon="mdi-circle-outline"></v-icon>
-                <v-icon v-else-if="pkg.status === 'success'" color="success" icon="mdi-check-circle"></v-icon>
-                <v-icon v-else-if="pkg.status === 'error'" color="error" icon="mdi-close-circle"></v-icon>
-              </template>
-              <v-list-item-title class="text-body-2 font-weight-medium ms-3">{{ pkg.name }}</v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-card-text>
-        <v-card-actions class="px-0 pt-6">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" color="grey" @click="closeUpdateDialog" :disabled="updateDialog.updating">Cancel</v-btn>
-          <v-btn
-            v-if="!updateDialog.completed"
-            variant="flat"
-            color="info"
-            :loading="updateDialog.updating"
-            :disabled="updateDialog.packages.length === 0"
-            @click="confirmUpdate"
-          >
-            Confirm Update
-          </v-btn>
-          <v-btn
-            v-else
-            variant="flat"
-            color="success"
-            @click="closeUpdateDialog"
-          >
-            Done
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-divider class="mb-6"></v-divider>
-
     <Loader :loading="loading && !node" />
 
-    <v-container v-if="node" fluid class="pa-0 flex-grow-1 overflow-y-auto">
-      <v-row class="px-4">
-        <v-col cols="12" :md="(node.restart_required && node.pending_updates > 0) ? 6 : 12" class="pb-0" v-if="node.restart_required">
-          <v-alert
-            type="warning"
-            variant="tonal"
-            icon="mdi-restart"
-            class="mb-4"
-          >
-            <div class="d-flex justify-space-between align-center w-100">
-              <span>This node has pending system updates and requires a restart.</span>
-              <v-btn size="small" color="warning" variant="elevated" @click="rebootDialog.show = true">Reboot Now</v-btn>
-            </div>
-          </v-alert>
-        </v-col>
-        <v-col cols="12" :md="(node.restart_required && node.pending_updates > 0) ? 6 : 12" class="pb-0" v-if="node.pending_updates > 0">
-          <v-alert
-            type="info"
-            variant="tonal"
-            icon="mdi-package-down"
-            class="mb-4"
-          >
-            <div class="d-flex justify-space-between align-center w-100">
-              <span>There are <strong>{{ node.pending_updates }}</strong> package updates available for this node.</span>
-              <v-btn size="small" color="info" variant="elevated" @click="openUpdateDialog">Run Updates</v-btn>
-            </div>
-          </v-alert>
-        </v-col>
+    <template v-if="node">
+      <!-- Alert Banners -->
+      <div v-if="node.restart_required" class="alert-banner alert-warn">
+        <span>This node has pending system updates and requires a restart.</span>
+        <button type="button" class="btn btn-sm" @click="rebootDialog.show = true">Reboot Now</button>
+      </div>
 
-        <!-- Technical Details -->
-        <v-col cols="12">
-          <v-card class="glass-card pa-4 mb-4" elevation="0">
-            <h3 class="text-subtitle-1 font-weight-bold mb-4 d-flex align-center">
-              <v-icon size="small" class="me-2">mdi-information-outline</v-icon>
-              System Information
-            </h3>
-            <v-list bg-color="transparent" density="compact" class="d-flex flex-wrap">
-              <v-list-item class="px-0 flex-grow-1" style="min-width: 250px">
-                <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 100px">Operating System</span></template>
-                <v-list-item-title class="text-body-2">{{ node.os }}</v-list-item-title>
-              </v-list-item>
-              <v-list-item class="px-0 flex-grow-1" style="min-width: 250px">
-                <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 100px">Architecture</span></template>
-                <v-list-item-title class="text-body-2">{{ node.architecture }}</v-list-item-title>
-              </v-list-item>
-              <v-list-item class="px-0 flex-grow-1" style="min-width: 250px">
-                <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 100px">CPUs</span></template>
-                <v-list-item-title class="text-body-2">{{ node.cpus }} Cores</v-list-item-title>
-              </v-list-item>
-              <v-list-item class="px-0 flex-grow-1" style="min-width: 250px">
-                <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 100px">Physical Memory</span></template>
-                <v-list-item-title class="text-body-2">{{ formatBytes(node.memory) }}</v-list-item-title>
-              </v-list-item>
-              <v-list-item class="px-0 flex-grow-1" style="min-width: 250px">
-                <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 100px">Docker Version</span></template>
-                <v-list-item-title class="text-body-2"><code>{{ node.engine_version }}</code></v-list-item-title>
-              </v-list-item>
-              <v-list-item class="px-0 flex-grow-1" style="min-width: 250px">
-                <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 100px">IP Address</span></template>
-                <v-list-item-title class="text-body-2"><code>{{ node.ip }}</code></v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-card>
-        </v-col>
+      <div v-if="node.pending_updates > 0" class="alert-banner alert-info">
+        <span>
+          There are <strong class="fw-600">{{ node.pending_updates }}</strong> package updates available for this node.
+        </span>
+        <button type="button" class="btn btn-primary btn-sm" @click="openUpdateDialog">Run Updates</button>
+      </div>
 
-        <!-- Live Metrics Cards -->
-        <v-col cols="12" md="4">
-          <v-card class="glass-card h-100 pa-4" elevation="0">
-            <div class="d-flex align-center mb-4">
-              <v-icon color="primary" class="me-2">mdi-cpu-64-bit</v-icon>
-              <span class="text-subtitle-2 font-weight-bold text-grey">CPU Usage</span>
-            </div>
-            <div class="d-flex align-end justify-space-between">
-              <span class="text-h3 font-weight-bold">{{ Math.ceil(node.cpu_usage) }}%</span>
-              <v-progress-circular
-                :model-value="node.cpu_usage"
-                color="primary"
-                size="64"
-                width="8"
-              >
-                <v-icon size="small">mdi-percent</v-icon>
-              </v-progress-circular>
-            </div>
-          </v-card>
-        </v-col>
+      <!-- 3 Key Metric Cards -->
+      <section class="metrics-row" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+        <div class="metric-box" style="cursor: default;">
+          <span class="metric-label">CPU Usage</span>
+          <span class="metric-number">{{ Math.round(node.cpu_usage || 0) }}%</span>
+          <div class="telemetry-track" style="margin-block-start: 6px;">
+            <div
+              class="telemetry-fill"
+              :class="getTelemetryClass(node.cpu_usage || 0)"
+              :style="{ width: `${Math.min(100, Math.round(node.cpu_usage || 0))}%` }"
+            ></div>
+          </div>
+        </div>
 
-        <v-col cols="12" md="4">
-          <v-card class="glass-card h-100 pa-4" elevation="0">
-            <div class="d-flex align-center mb-4">
-              <v-icon color="secondary" class="me-2">mdi-memory</v-icon>
-              <span class="text-subtitle-2 font-weight-bold text-grey">Memory Usage</span>
-            </div>
-            <div class="d-flex align-end justify-space-between">
-              <div>
-                <div class="text-h3 font-weight-bold">{{ formatBytes(node.memory_usage) }}</div>
-                <div class="text-caption text-grey">of {{ formatBytes(node.memory_total) }}</div>
+        <div class="metric-box" style="cursor: default;">
+          <span class="metric-label">Memory Usage</span>
+          <span class="metric-number">{{ formatBytes(node.memory_usage) }}</span>
+          <span class="metric-meta">of {{ formatBytes(node.memory_total) }} ({{ memPercent }}%)</span>
+        </div>
+
+        <div class="metric-box" style="cursor: default;">
+          <span class="metric-label">Uptime</span>
+          <span class="metric-number">{{ formatUptime(node.uptime) }}</span>
+          <span class="metric-meta">Since last reboot</span>
+        </div>
+      </section>
+
+      <!-- Detail Grid: System Info & Labels -->
+      <div class="detail-grid">
+        <section class="surface-card col-7" aria-labelledby="node-sys-title">
+          <div class="card-header">
+            <span id="node-sys-title" class="card-title">System Information</span>
+          </div>
+          <div class="card-body">
+            <div class="config-grid">
+              <div class="config-field">
+                <span class="config-label">Operating System</span>
+                <span class="config-val">{{ node.os || '-' }}</span>
               </div>
-              <v-progress-circular
-                :model-value="(node.memory_usage / node.memory_total) * 100"
-                color="secondary"
-                size="64"
-                width="8"
-              >
-                <v-icon size="small">mdi-memory</v-icon>
-              </v-progress-circular>
+              <div class="config-field">
+                <span class="config-label">Architecture</span>
+                <span class="config-val">{{ node.architecture || '-' }}</span>
+              </div>
+              <div class="config-field">
+                <span class="config-label">CPUs</span>
+                <span class="config-val">{{ node.cpus }} Cores</span>
+              </div>
+              <div class="config-field">
+                <span class="config-label">Physical Memory</span>
+                <span class="config-val">{{ formatBytes(node.memory) }}</span>
+              </div>
+              <div class="config-field">
+                <span class="config-label">Docker Engine</span>
+                <span class="config-val">{{ node.engine_version }}</span>
+              </div>
+              <div class="config-field">
+                <span class="config-label">IP Address</span>
+                <span class="config-val mono">{{ node.ip }}</span>
+              </div>
             </div>
-          </v-card>
-        </v-col>
+          </div>
+        </section>
 
-        <v-col cols="12" md="4">
-          <v-card class="glass-card h-100 pa-4" elevation="0">
-            <div class="d-flex align-center mb-4">
-              <v-icon color="success" class="me-2">mdi-clock-outline</v-icon>
-              <span class="text-subtitle-2 font-weight-bold text-grey">Uptime</span>
+        <section class="surface-card col-5" aria-labelledby="node-labels-title">
+          <div class="card-header">
+            <span id="node-labels-title" class="card-title">Node Labels</span>
+            <button type="button" class="btn btn-sm" @click="showAddLabel = true">+ Add Label</button>
+          </div>
+          <div class="card-body">
+            <div v-if="!Object.keys(node.labels || {}).length" class="text-center text-3">
+              No custom labels assigned.
             </div>
-            <div class="text-h3 font-weight-bold mt-2">{{ formatUptime(node.uptime) }}</div>
-            <div class="text-caption text-grey mt-1">Since last agent report</div>
-          </v-card>
-        </v-col>
+            <div v-else class="env-list">
+              <div v-for="(val, key) in node.labels" :key="key" class="env-row">
+                <span class="env-key" :title="String(key)">{{ key }}</span>
+                <span class="env-val flex-between">
+                  <span class="mono">{{ val || '—' }}</span>
+                  <button
+                    type="button"
+                    class="btn btn-icon btn-sm btn-danger-subtle"
+                    title="Remove label"
+                    aria-label="Remove label"
+                    @click="confirmDeleteLabel(String(key))"
+                  >
+                    <v-icon size="14">mdi-close</v-icon>
+                  </button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
 
-        <!-- Historical Graphs -->
-        <v-col cols="12">
-          <node-history-charts ref="historyCharts" :node-id="node.node_id" :total-memory="node.memory_total || node.memory" />
-        </v-col>
-      </v-row>
-    </v-container>
+      <!-- Historical Graphs -->
+      <node-history-charts
+        ref="historyCharts"
+        :node-id="node.node_id"
+        :total-memory="node.memory_total || node.memory"
+      />
+    </template>
+
+    <!-- Delete Label Modal -->
+    <AppModal v-model="showConfirmDelete" title="Delete Label?" :persistent="deletingLabel">
+      <p class="text-2" style="margin: 0;">
+        Are you sure you want to delete the label <strong class="text-1 mono">{{ labelToDelete }}</strong>?
+      </p>
+      <template #footer>
+        <button type="button" class="btn" :disabled="deletingLabel" @click="showConfirmDelete = false">Cancel</button>
+        <button type="button" class="btn btn-danger" :disabled="deletingLabel" @click="deleteLabel">
+          {{ deletingLabel ? 'Deleting...' : 'Delete Label' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- Add Label Modal -->
+    <AppModal v-model="showAddLabel" title="Add Node Label" :persistent="savingLabel">
+      <div class="form-field">
+        <label class="form-label" for="label-key">Key</label>
+        <input id="label-key" v-model="newLabel.key" type="text" class="form-input mono" placeholder="e.g. env" />
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="label-val">Value (Optional)</label>
+        <input id="label-val" v-model="newLabel.value" type="text" class="form-input mono" placeholder="e.g. production" />
+      </div>
+      <template #footer>
+        <button type="button" class="btn" :disabled="savingLabel" @click="showAddLabel = false">Cancel</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="savingLabel || !newLabel.key.trim()"
+          @click="saveLabel"
+        >
+          {{ savingLabel ? 'Saving...' : 'Add Label' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- Confirm Swarm Action Modal -->
+    <AppModal v-model="confirmDialog.show" :title="confirmDialog.title" :persistent="updatingNode">
+      <p class="text-2" style="margin: 0;">{{ confirmDialog.text }}</p>
+      <template #footer>
+        <button type="button" class="btn" :disabled="updatingNode" @click="confirmDialog.show = false">Cancel</button>
+        <button
+          type="button"
+          class="btn"
+          :class="confirmDialog.color === 'error' ? 'btn-danger' : 'btn-primary'"
+          :disabled="updatingNode"
+          @click="executeSwarmAction"
+        >
+          {{ updatingNode ? 'Updating...' : confirmDialog.actionText }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- Reboot Confirmation Modal -->
+    <AppModal v-model="rebootDialog.show" title="Reboot Node" :persistent="isRebootingHost">
+      <p class="text-2" style="margin: 0;">
+        Are you sure you want to reboot node <strong class="text-1">{{ node?.hostname }}</strong>?
+        We recommend draining the node first to safely reschedule its active containers.
+      </p>
+      <template #footer>
+        <button type="button" class="btn" :disabled="isRebootingHost" @click="rebootDialog.show = false">Cancel</button>
+        <button
+          type="button"
+          class="btn btn-danger-subtle"
+          :disabled="isRebootingHost"
+          @click="executeHostReboot(false)"
+        >
+          Reboot Immediately
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="isRebootingHost"
+          @click="executeHostReboot(true)"
+        >
+          Drain & Reboot
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- System Updates Modal -->
+    <AppModal
+      v-model="updateDialog.show"
+      title="Run System Updates"
+      max-width="520px"
+      :persistent="updateDialog.updating"
+    >
+      <div v-if="updateDialog.error" class="alert-banner alert-err">
+        {{ updateDialog.error }}
+      </div>
+
+      <div v-if="updateDialog.loading" class="py-6 text-center">
+        <Loader :loading="true" />
+        <span class="text-2">Fetching pending packages...</span>
+      </div>
+
+      <div v-else-if="updateDialog.packages.length === 0" class="text-center text-3 py-4">
+        No packages found.
+      </div>
+
+      <div v-else class="surface-card" style="max-block-size: 80vh; overflow-y: auto;">
+        <div v-for="(pkg, idx) in updateDialog.packages" :key="idx" class="workload-row" style="padding: 10px 14px; cursor: default;">
+          <span class="mono text-1">{{ pkg.name }}</span>
+          <span class="status-badge">
+            <span
+              class="status-dot"
+              :class="pkg.status === 'success' ? 'dot-ok' : (pkg.status === 'error' ? 'dot-err' : 'dot-warn')"
+            ></span>
+            {{ pkg.status }}
+          </span>
+        </div>
+      </div>
+
+      <template #footer>
+        <button type="button" class="btn" :disabled="updateDialog.updating" @click="closeUpdateDialog">Cancel</button>
+        <button
+          v-if="!updateDialog.completed"
+          type="button"
+          class="btn btn-primary"
+          :disabled="updateDialog.updating || updateDialog.packages.length === 0"
+          @click="confirmUpdate"
+        >
+          {{ updateDialog.updating ? 'Updating...' : 'Confirm Update' }}
+        </button>
+        <button v-else type="button" class="btn btn-primary" @click="closeUpdateDialog">Done</button>
+      </template>
+    </AppModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
-import Loader from '../../components/Loader.vue'
-import NodeHistoryCharts from '../../components/NodeHistoryCharts.vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { useRoute } from 'vue-router';
+import Loader from '../../components/Loader.vue';
+import AppModal from '../../components/AppModal.vue';
+import NodeHistoryCharts from '../../components/NodeHistoryCharts.vue';
 
-const route = useRoute()
-const node = ref<any>(null)
-const loading = ref(true)
-const historyCharts = ref<any>(null)
-let ws: WebSocket | null = null
+const route = useRoute();
+const node = ref<any>(null);
+const loading = ref(true);
+const historyCharts = ref<any>(null);
+let ws: WebSocket | null = null;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let unmounted = false;
 
-const showAddLabel = ref(false)
-const savingLabel = ref(false)
-const newLabel = ref({ key: '', value: '' })
+const showAddLabel = ref(false);
+const savingLabel = ref(false);
+const newLabel = ref({ key: '', value: '' });
 
-const showConfirmDelete = ref(false)
-const deletingLabel = ref(false)
-const labelToDelete = ref('')
+const showConfirmDelete = ref(false);
+const deletingLabel = ref(false);
+const labelToDelete = ref('');
 
-const updatingNode = ref(false)
+const updatingNode = ref(false);
 const confirmDialog = ref({
   show: false,
   title: '',
   text: '',
   actionText: '',
   color: 'primary',
-  payload: {} as any
-})
+  payload: {} as any,
+});
 
-const isUpdatingHost = ref(false)
-const isRebootingHost = ref(false)
+const isRebootingHost = ref(false);
 const rebootDialog = ref({
   show: false,
-  draining: false
-})
+  draining: false,
+});
 
 interface PackageUpdate {
-  name: string
-  status: 'pending' | 'success' | 'error'
+  name: string;
+  status: 'pending' | 'success' | 'error';
 }
 
 const updateDialog = ref({
@@ -463,120 +365,133 @@ const updateDialog = ref({
   completed: false,
   packages: [] as PackageUpdate[],
   error: '',
-  eventSource: null as EventSource | null
-})
+  eventSource: null as EventSource | null,
+});
+
+const memPercent = computed(() => {
+  if (!node.value?.memory_total) return 0;
+  return Math.round((node.value.memory_usage / node.value.memory_total) * 100);
+});
+
+const formatLabel = (val: string) => {
+  if (!val) return '';
+  return val.charAt(0).toUpperCase() + val.slice(1).toLowerCase();
+};
+
+const getTelemetryClass = (pct: number) => {
+  if (pct >= 90) return 'is-err';
+  if (pct >= 75) return 'is-warn';
+  return '';
+};
 
 const openUpdateDialog = async () => {
-  if (!node.value) return
-  updateDialog.value.show = true
-  updateDialog.value.loading = true
-  updateDialog.value.error = ''
-  updateDialog.value.updating = false
-  updateDialog.value.completed = false
-  updateDialog.value.packages = []
-  
+  if (!node.value) return;
+  updateDialog.value.show = true;
+  updateDialog.value.loading = true;
+  updateDialog.value.error = '';
+  updateDialog.value.updating = false;
+  updateDialog.value.completed = false;
+  updateDialog.value.packages = [];
+
   try {
-    const res = await fetch(`/api/nodes/updates/list?id=${node.value.node_id}`)
+    const res = await fetch(`/api/nodes/updates/list?id=${node.value.node_id}`);
     if (res.ok) {
-      const pkgs = await res.json()
+      const pkgs = await res.json();
       if (pkgs) {
-        updateDialog.value.packages = pkgs.map((p: string) => ({ name: p, status: 'pending' }))
+        updateDialog.value.packages = pkgs.map((p: string) => ({ name: p, status: 'pending' }));
       }
     } else {
-      updateDialog.value.error = 'Failed to load package list'
+      updateDialog.value.error = 'Failed to load package list';
     }
-  } catch (err) {
-    updateDialog.value.error = 'Failed to load package list'
+  } catch {
+    updateDialog.value.error = 'Failed to load package list';
   } finally {
-    updateDialog.value.loading = false
+    updateDialog.value.loading = false;
   }
-}
+};
 
 const confirmUpdate = () => {
-  if (!node.value) return
-  updateDialog.value.updating = true
-  updateDialog.value.error = ''
-  
-  const token = localStorage.getItem("halyard_token") || ""
-  const eventSource = new EventSource(`/api/nodes/update/stream?id=${node.value.node_id}&token=${encodeURIComponent(token)}`)
-  updateDialog.value.eventSource = eventSource
-  
+  if (!node.value) return;
+  updateDialog.value.updating = true;
+  updateDialog.value.error = '';
+
+  const token = localStorage.getItem('halyard_token') || '';
+  const eventSource = new EventSource(
+    `/api/nodes/update/stream?id=${node.value.node_id}&token=${encodeURIComponent(token)}`
+  );
+  updateDialog.value.eventSource = eventSource;
+
   eventSource.onmessage = (event) => {
-    const data = event.data
-    
+    const data = event.data;
     if (data === 'DONE') {
-      eventSource.close()
-      updateDialog.value.eventSource = null
-      updateDialog.value.updating = false
-      updateDialog.value.completed = true
-      fetchNodeDetail()
-      return
+      eventSource.close();
+      updateDialog.value.eventSource = null;
+      updateDialog.value.updating = false;
+      updateDialog.value.completed = true;
+      fetchNodeDetail();
+      return;
     }
-    
+
     if (data.startsWith('ERROR:')) {
-      updateDialog.value.error = data
-      eventSource.close()
-      updateDialog.value.eventSource = null
-      updateDialog.value.updating = false
-      // Mark remaining as error
-      updateDialog.value.packages.forEach(p => {
-        if (p.status === 'pending') p.status = 'error'
-      })
-      return
+      updateDialog.value.error = data;
+      eventSource.close();
+      updateDialog.value.eventSource = null;
+      updateDialog.value.updating = false;
+      updateDialog.value.packages.forEach((p) => {
+        if (p.status === 'pending') p.status = 'error';
+      });
+      return;
     }
-    
-    const match = data.match(/Setting up ([a-zA-Z0-9\.\-\+]+)/)
+
+    const match = data.match(/Setting up ([a-zA-Z0-9.\-+]+)/);
     if (match && match[1]) {
-      const pkgName = match[1]
-      const pkg = updateDialog.value.packages.find(p => p.name === pkgName || pkgName.startsWith(p.name))
-      if (pkg) {
-        pkg.status = 'success'
-      }
+      const pkgName = match[1];
+      const pkg = updateDialog.value.packages.find((p) => p.name === pkgName || pkgName.startsWith(p.name));
+      if (pkg) pkg.status = 'success';
     }
-  }
-  
-  eventSource.onerror = (err) => {
-    updateDialog.value.error = 'Stream connection lost'
-    eventSource.close()
-    updateDialog.value.eventSource = null
-    updateDialog.value.updating = false
-    updateDialog.value.packages.forEach(p => {
-      if (p.status === 'pending') p.status = 'error'
-    })
-  }
-}
+  };
+
+  eventSource.onerror = () => {
+    updateDialog.value.error = 'Stream connection lost';
+    eventSource.close();
+    updateDialog.value.eventSource = null;
+    updateDialog.value.updating = false;
+    updateDialog.value.packages.forEach((p) => {
+      if (p.status === 'pending') p.status = 'error';
+    });
+  };
+};
 
 const closeUpdateDialog = () => {
   if (updateDialog.value.eventSource) {
-    updateDialog.value.eventSource.close()
+    updateDialog.value.eventSource.close();
   }
-  updateDialog.value.show = false
-}
+  updateDialog.value.show = false;
+};
+
 const executeHostReboot = async (drain: boolean) => {
-  if (!node.value) return
-  isRebootingHost.value = true
-  rebootDialog.value.draining = drain
+  if (!node.value) return;
+  isRebootingHost.value = true;
+  rebootDialog.value.draining = drain;
   try {
-    const url = `/api/nodes/host/reboot?id=${node.value.node_id}${drain ? '&drain=true' : ''}`
-    const response = await fetch(url, { method: 'POST' })
-    if (!response.ok) {
-      console.error('Failed to trigger host reboot:', await response.text())
-    } else {
-      rebootDialog.value.show = false
+    const url = `/api/nodes/host/reboot?id=${node.value.node_id}${drain ? '&drain=true' : ''}`;
+    const response = await fetch(url, { method: 'POST' });
+    if (response.ok) {
+      rebootDialog.value.show = false;
       if (drain) {
-        node.value.availability = 'drain'
+        node.value.availability = 'drain';
       }
     }
   } catch (err) {
-    console.error('Failed to trigger host reboot:', err)
+    console.error('Failed to trigger host reboot:', err);
   } finally {
-    isRebootingHost.value = false
+    isRebootingHost.value = false;
   }
-}
+};
 
 const triggerSwarmAction = (action: 'drain' | 'activate' | 'promote' | 'demote') => {
-  if (!node.value) return
-  
+  if (!node.value) return;
+
   if (action === 'drain') {
     confirmDialog.value = {
       show: true,
@@ -584,8 +499,8 @@ const triggerSwarmAction = (action: 'drain' | 'activate' | 'promote' | 'demote')
       text: `Are you sure you want to drain node "${node.value.hostname}"? Active service replicas will be rescheduled to other nodes.`,
       actionText: 'Drain Node',
       color: 'warning',
-      payload: { availability: 'drain' }
-    }
+      payload: { availability: 'drain' },
+    };
   } else if (action === 'activate') {
     confirmDialog.value = {
       show: true,
@@ -593,8 +508,8 @@ const triggerSwarmAction = (action: 'drain' | 'activate' | 'promote' | 'demote')
       text: `Are you sure you want to activate node "${node.value.hostname}"? It will resume accepting Swarm tasks.`,
       actionText: 'Activate Node',
       color: 'success',
-      payload: { availability: 'active' }
-    }
+      payload: { availability: 'active' },
+    };
   } else if (action === 'promote') {
     confirmDialog.value = {
       show: true,
@@ -602,8 +517,8 @@ const triggerSwarmAction = (action: 'drain' | 'activate' | 'promote' | 'demote')
       text: `Are you sure you want to promote node "${node.value.hostname}" to a Swarm Manager?`,
       actionText: 'Promote',
       color: 'info',
-      payload: { role: 'manager' }
-    }
+      payload: { role: 'manager' },
+    };
   } else if (action === 'demote') {
     confirmDialog.value = {
       show: true,
@@ -611,136 +526,111 @@ const triggerSwarmAction = (action: 'drain' | 'activate' | 'promote' | 'demote')
       text: `Are you sure you want to demote node "${node.value.hostname}" to a Swarm Worker? It will no longer participate in cluster coordination.`,
       actionText: 'Demote',
       color: 'error',
-      payload: { role: 'worker' }
-    }
+      payload: { role: 'worker' },
+    };
   }
-}
+};
 
 const executeSwarmAction = async () => {
-  const payload = confirmDialog.value.payload
-  if (!payload || !node.value) return
-  
-  updatingNode.value = true
+  const payload = confirmDialog.value.payload;
+  if (!payload || !node.value) return;
+
+  updatingNode.value = true;
   try {
     const response = await fetch('/api/nodes/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: node.value.node_id,
-        ...payload
-      })
-    })
-
+        ...payload,
+      }),
+    });
     if (response.ok) {
-      await fetchNodeDetail()
-      confirmDialog.value.show = false
-    } else {
-      const errMsg = await response.text()
-      console.error('Failed to update node status:', errMsg)
+      await fetchNodeDetail();
+      confirmDialog.value.show = false;
     }
   } catch (err) {
-    console.error('Failed to update node status:', err)
+    console.error('Failed to update node status:', err);
   } finally {
-    updatingNode.value = false
+    updatingNode.value = false;
   }
-}
+};
 
 const confirmDeleteLabel = (key: string) => {
-  labelToDelete.value = key
-  showConfirmDelete.value = true
-}
+  labelToDelete.value = key;
+  showConfirmDelete.value = true;
+};
 
 const deleteLabel = async () => {
-  if (!labelToDelete.value) return
-  deletingLabel.value = true
+  if (!labelToDelete.value) return;
+  deletingLabel.value = true;
   try {
     const response = await fetch('/api/nodes/labels/remove', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: node.value.node_id,
-        key: labelToDelete.value
-      })
-    })
-
+        key: labelToDelete.value,
+      }),
+    });
     if (response.ok) {
-      if (node.value.labels) {
-        delete node.value.labels[labelToDelete.value]
-      }
-      showConfirmDelete.value = false
-      labelToDelete.value = ''
+      if (node.value.labels) delete node.value.labels[labelToDelete.value];
+      showConfirmDelete.value = false;
+      labelToDelete.value = '';
     }
   } catch (err) {
-    console.error('Failed to delete label:', err)
+    console.error('Failed to delete label:', err);
   } finally {
-    deletingLabel.value = false
+    deletingLabel.value = false;
   }
-}
+};
 
 const saveLabel = async () => {
-  if (!newLabel.value.key) return
-  savingLabel.value = true
+  if (!newLabel.value.key.trim()) return;
+  savingLabel.value = true;
   try {
     const response = await fetch('/api/nodes/labels', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: node.value.node_id,
-        key: newLabel.value.key,
-        value: newLabel.value.value
-      })
-    })
-
+        key: newLabel.value.key.trim(),
+        value: newLabel.value.value,
+      }),
+    });
     if (response.ok) {
-      // Update local state and close
-      if (!node.value.labels) node.value.labels = {}
-      node.value.labels[newLabel.value.key] = newLabel.value.value
-      showAddLabel.value = false
-      newLabel.value = { key: '', value: '' }
+      if (!node.value.labels) node.value.labels = {};
+      node.value.labels[newLabel.value.key.trim()] = newLabel.value.value;
+      showAddLabel.value = false;
+      newLabel.value = { key: '', value: '' };
     }
   } catch (err) {
-    console.error('Failed to save label:', err)
+    console.error('Failed to save label:', err);
   } finally {
-    savingLabel.value = false
+    savingLabel.value = false;
   }
-}
-
-const statusColor = computed(() => {
-  if (!node.value) return 'grey'
-  return node.value.status === 'ready' ? 'success' : 'error'
-})
-
-const availabilityColor = computed(() => {
-  if (!node.value) return 'grey'
-  switch (node.value.availability) {
-    case 'active':
-      return 'success'
-    case 'pause':
-      return 'warning'
-    case 'drain':
-      return 'error'
-    default:
-      return 'grey'
-  }
-})
+};
 
 const fetchNodeDetail = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await fetch(`/api/nodes/detail?id=${route.params.id}`)
+    const response = await fetch(`/api/nodes/detail?id=${route.params.id}`);
     if (response.ok) {
-      node.value = await response.json()
-      setupStatsStream()
+      node.value = await response.json();
+      setupStatsStream();
     }
   } catch (err) {
-    console.error('Failed to fetch node detail:', err)
+    console.error('Failed to fetch node detail:', err);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const setupStatsStream = () => {
-  if (ws) ws.close()
+  if (ws) ws.close();
+  if (retryTimer) clearTimeout(retryTimer);
+  if (unmounted) return;
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const token = localStorage.getItem('halyard_token') || '';
   const wsUrl = `${protocol}//${window.location.host}/api/nodes/stream?token=${encodeURIComponent(token)}`;
@@ -756,8 +646,6 @@ const setupStatsStream = () => {
         node.value.uptime = stats.uptime;
         node.value.pending_updates = stats.pending_updates;
         node.value.restart_required = stats.restart_required;
-
-        // Update charts in real-time
         if (historyCharts.value) {
           historyCharts.value.addStats(stats);
         }
@@ -768,82 +656,34 @@ const setupStatsStream = () => {
   };
 
   ws.onclose = () => {
-    if (route.name === 'node-detail') {
-      setTimeout(setupStatsStream, 5000);
+    if (!unmounted && route.name === 'node-detail') {
+      retryTimer = setTimeout(setupStatsStream, 5000);
     }
   };
-}
+};
 
 const formatBytes = (bytes: number) => {
-  if (!bytes || bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+};
 
 const formatUptime = (seconds: number) => {
-  if (!seconds) return '-'
-  const days = Math.floor(seconds / (24 * 3600))
-  const hours = Math.floor((seconds % (24 * 3600)) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  return `${days}d ${hours}h ${minutes}m`
-}
+  if (!seconds) return '-';
+  const days = Math.floor(seconds / (24 * 3600));
+  const hours = Math.floor((seconds % (24 * 3600)) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  return `${hours}h ${minutes}m`;
+};
 
-onMounted(fetchNodeDetail)
+onMounted(fetchNodeDetail);
+
 onUnmounted(() => {
-  if (ws) ws.close()
-})
+  unmounted = true;
+  if (retryTimer) clearTimeout(retryTimer);
+  if (ws) ws.close();
+});
 </script>
-
-<style scoped>
-.label-chip-mini {
-  display: flex;
-  font-size: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-  height: 18px;
-  transition: all 0.2s ease;
-}
-
-.label-chip-hover:hover {
-  border-color: rgba(244, 67, 54, 0.4);
-}
-
-.delete-label-btn {
-  width: 0 !important;
-  min-width: 0 !important;
-  opacity: 0;
-  padding: 0 !important;
-  height: 18px !important;
-  transition: all 0.2s ease;
-  margin-left: -4px;
-}
-
-.label-chip-hover:hover .delete-label-btn {
-  width: 24px !important;
-  opacity: 1;
-  margin-left: 0;
-}
-
-.label-key-mini {
-  background: rgba(139, 92, 246, 0.15);
-  color: #A78BFA;
-  padding: 0 6px;
-  display: flex;
-  align-items: center;
-  font-weight: bold;
-}
-
-.label-val-mini {
-  background: rgba(255, 255, 255, 0.03);
-  color: #ccc;
-  padding: 0 6px;
-  display: flex;
-  align-items: center;
-}
-
-.gap-1 { gap: 4px; }
-.gap-2 { gap: 8px; }
-</style>
