@@ -1,552 +1,421 @@
 <template>
-  <div class="fill-height d-flex flex-column pa-4">
-    <!-- Header -->
-    <div class="d-flex align-center mb-6">
-      <v-btn
-        icon="mdi-arrow-left"
-        variant="text"
-        @click="$router.back()"
-        class="me-2"
-      ></v-btn>
-      <div v-if="container">
-        <h1 class="text-h4 font-weight-bold d-flex align-center">
-          {{ formatName(container.names) }}
-          <v-chip
-            :color="getStateColor(container.state)"
-            size="small"
-            label
-            class="ms-4 text-uppercase font-weight-bold"
-          >
-            {{ container.state }}
-          </v-chip>
+  <div class="section-block" :class="{ 'viewport-fit-active': tab === 'logs' || tab === 'terminal' }" style="gap: 24px;">
+    <!-- Page Header -->
+    <div class="page-header" style="border-block-end: 0; padding-block-end: 4px;">
+      <div class="page-header-left">
+        <div class="status-line">
+          <button type="button" class="section-link" @click="$router.back()">
+            ← {{ container?.stack ? `Stack: ${container.stack}` : 'Containers' }}
+          </button>
+        </div>
+        <h1 class="page-title">
+          <span>{{ container ? formatName(container.names) : 'Container Detail' }}</span>
+          <span v-if="container" class="status-badge">
+            <span class="status-dot" :class="getStateDotClass(container.state)"></span>
+            {{ formatStateLabel(container.state) }}
+          </span>
         </h1>
-        <p class="text-subtitle-1 text-grey-lighten-1">
+        <p v-if="container" class="page-subtitle mono">
           {{ container.id.substring(0, 12) }}
         </p>
       </div>
-      <div v-else>
-        <h1 class="text-h4 font-weight-bold">Container Detail</h1>
+
+      <div class="header-actions">
+        <template v-if="container">
+          <button
+            v-if="container.state.toLowerCase() === 'running'"
+            type="button"
+            class="btn"
+            :disabled="stopping"
+            @click="confirmStop"
+          >
+            {{ stopping ? 'Stopping...' : 'Stop' }}
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn btn-primary"
+            :disabled="starting"
+            @click="startContainer"
+          >
+            {{ starting ? 'Starting...' : 'Start' }}
+          </button>
+          <button
+            v-if="container.state.toLowerCase() === 'running'"
+            type="button"
+            class="btn"
+            :disabled="restarting"
+            @click="confirmRestart"
+          >
+            {{ restarting ? 'Restarting...' : 'Restart' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger-subtle"
+            :disabled="deleting"
+            @click="confirmDelete"
+          >
+            {{ deleting ? 'Deleting...' : 'Delete' }}
+          </button>
+        </template>
+        <button
+          type="button"
+          class="btn btn-icon"
+          :disabled="loading"
+          aria-label="Refresh"
+          title="Refresh"
+          @click="fetchDetails"
+        >
+          <v-icon size="16">mdi-refresh</v-icon>
+        </button>
       </div>
-      <v-spacer></v-spacer>
-      <div v-if="container" class="d-flex align-center gap-2 me-4">
-        <v-btn
-          v-if="container.state.toLowerCase() === 'running'"
-          prepend-icon="mdi-stop"
-          color="warning"
-          variant="tonal"
-          @click="confirmStop"
-          :loading="stopping"
-          class="rounded-lg font-weight-bold"
-        >Stop</v-btn>
-        <v-btn
-          v-if="container.state.toLowerCase() !== 'running'"
-          prepend-icon="mdi-play"
-          color="success"
-          variant="tonal"
-          @click="startContainer"
-          :loading="starting"
-          class="rounded-lg font-weight-bold"
-        >Start</v-btn>
-        <v-btn
-          v-if="container.state.toLowerCase() === 'running'"
-          prepend-icon="mdi-restart"
-          color="info"
-          variant="tonal"
-          @click="confirmRestart"
-          :loading="restarting"
-          class="rounded-lg font-weight-bold"
-        >Restart</v-btn>
-        <v-btn
-          prepend-icon="mdi-delete"
-          color="error"
-          variant="tonal"
-          @click="confirmDelete"
-          :loading="deleting"
-          class="rounded-lg font-weight-bold"
-        >Delete</v-btn>
-      </div>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchDetails"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
     </div>
 
     <Loader :loading="loading" />
 
-    <v-tabs v-model="tab" color="primary" class="mb-6 border-b">
-      <v-tab value="overview" prepend-icon="mdi-view-dashboard-outline"
-        >Overview</v-tab
+    <!-- Tab Bar -->
+    <div class="tabs-bar" role="tablist" aria-label="Container views">
+      <button
+        type="button"
+        role="tab"
+        class="tab-btn"
+        :aria-selected="tab === 'overview'"
+        @click="tab = 'overview'"
       >
-      <v-tab value="logs" prepend-icon="mdi-text-box-outline">Logs</v-tab>
-      <v-tab value="terminal" prepend-icon="mdi-console">Terminal</v-tab>
-    </v-tabs>
+        Overview
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="tab-btn"
+        :aria-selected="tab === 'logs'"
+        @click="tab = 'logs'"
+      >
+        Logs
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="tab-btn"
+        :aria-selected="tab === 'terminal'"
+        @click="tab = 'terminal'"
+      >
+        Terminal
+      </button>
+    </div>
 
-    <v-window v-model="tab" class="flex-grow-1">
-      <!-- Overview Tab -->
-      <v-window-item value="overview">
-        <div v-if="container">
-          <v-row>
-            <!-- Basic Info -->
-            <v-col cols="12" md="8">
-              <v-card class="glass-card rounded-xl h-100">
-                <v-card-title class="pa-6 pb-2 font-weight-bold"
-                  >Configuration</v-card-title
-                >
-                <v-card-text class="pa-6">
-                  <v-row>
-                    <v-col cols="12" sm="6">
-                      <div class="text-caption text-grey mb-1">Image</div>
-                      <div class="text-body-2 font-weight-bold break-word">
-                        {{ container.image }}
-                      </div>
-                    </v-col>
-                    <v-col cols="12" sm="6">
-                      <div class="text-caption text-grey mb-1">Image ID</div>
-                      <div class="text-body-2 font-weight-bold break-word">
-                        {{ container.image_id }}
-                      </div>
-                    </v-col>
-                    <v-col cols="12" sm="6">
-                      <div class="text-caption text-grey mb-1">Service</div>
-                      <div class="text-body-2 font-weight-bold">
-                        {{ container.service }}
-                      </div>
-                    </v-col>
-                    <v-col cols="12" sm="6">
-                      <div class="text-caption text-grey mb-1">Stack</div>
-                      <div class="text-body-2 font-weight-bold">
-                        {{ container.stack }}
-                      </div>
-                    </v-col>
-                    <v-col cols="12" sm="6">
-                      <div class="text-caption text-grey mb-1">Node</div>
-                      <div class="text-body-2 font-weight-bold">
-                        {{ container.node }}
-                      </div>
-                    </v-col>
-                    <v-col cols="12" sm="6">
-                      <div class="text-caption text-grey mb-1">Created At</div>
-                      <div class="text-body-2 font-weight-bold">
-                        {{ new Date(container.created_at).toLocaleString() }}
-                      </div>
-                    </v-col>
-                  </v-row>
-                </v-card-text>
-              </v-card>
-            </v-col>
-
-            <!-- Network Info -->
-            <v-col cols="12" md="4">
-              <v-card class="glass-card rounded-xl h-100">
-                <v-card-title class="pa-6 pb-2 font-weight-bold"
-                  >Networking</v-card-title
-                >
-                <v-card-text class="pa-6">
-                  <div class="mb-4">
-                    <div class="text-caption text-grey mb-2">Networks</div>
-                    <div class="d-flex flex-wrap gap-2">
-                      <v-chip
-                        v-for="net in container.networks"
-                        :key="net"
-                        size="x-small"
-                        color="primary"
-                        label
-                        variant="tonal"
-                      >
-                        {{ net }}
-                      </v-chip>
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-caption text-grey mb-2">Ports</div>
-                    <v-list density="compact" class="bg-transparent pa-0">
-                      <v-list-item
-                        v-for="(port, idx) in container.ports"
-                        :key="idx"
-                        class="px-0"
-                      >
-                        <template v-slot:prepend>
-                          <v-icon size="16" class="me-2"
-                            >mdi-lan-connect</v-icon
-                          >
-                        </template>
-                        <v-list-item-title class="text-caption">
-                          {{ port.public_port }}:{{ port.private_port }}/{{
-                            port.type
-                          }}
-                        </v-list-item-title>
-                      </v-list-item>
-                      <div
-                        v-if="!container.ports?.length"
-                        class="text-caption text-grey-darken-1"
-                      >
-                        No ports exposed
-                      </div>
-                    </v-list>
-                  </div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-
-            <!-- Environment Variables -->
-            <v-col cols="12" md="6">
-              <v-card class="glass-card rounded-xl">
-                <v-card-title class="pa-6 pb-2 font-weight-bold"
-                  >Environment</v-card-title
-                >
-                <v-card-text class="pa-6 pt-2">
-                  <div class="scroll-y-400 font-mono bg-black bg-opacity-20 rounded-lg pa-4">
-                    <div
-                      v-for="(env, idx) in container.env"
-                      :key="idx"
-                      class="env-item mb-1 d-flex"
-                    >
-                      <span
-                        class="text-caption font-weight-bold text-primary me-2"
-                        >{{ env.split("=")[0] }}:</span
-                      >
-                      <span
-                        class="text-caption text-grey-lighten-1 break-word"
-                        >{{ env.split("=")[1] }}</span
-                      >
-                    </div>
-                    <div
-                      v-if="!container.env?.length"
-                      class="text-caption text-grey"
-                    >
-                      No environment variables
-                    </div>
-                  </div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-
-            <!-- Mounts -->
-            <v-col cols="12" md="6">
-              <v-card class="glass-card rounded-xl">
-                <v-card-title class="pa-6 pb-2 font-weight-bold"
-                  >Mounts</v-card-title
-                >
-                <v-card-text class="pa-0">
-                  <v-table density="compact" class="bg-transparent">
-                    <thead>
-                      <tr>
-                        <th class="text-caption font-weight-bold">Source</th>
-                        <th class="text-caption font-weight-bold">
-                          Destination
-                        </th>
-                        <th class="text-caption font-weight-bold">Type</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="(mount, idx) in container.mounts" :key="idx">
-                        <td
-                          class="text-caption text-truncate-200"
-                          :title="mount.source"
-                        >
-                          {{ mount.source }}
-                        </td>
-                        <td
-                          class="text-caption text-truncate-200"
-                          :title="mount.destination"
-                        >
-                          {{ mount.destination }}
-                        </td>
-                        <td>
-                          <v-chip size="x-small" label>{{ mount.type }}</v-chip>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </v-table>
-                  <div
-                    v-if="!container.mounts?.length"
-                    class="pa-6 text-center text-caption text-grey"
-                  >
-                    No mounts configured
-                  </div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-
-            <!-- Labels -->
-            <v-col cols="12">
-              <v-card class="glass-card rounded-xl">
-                <v-card-title class="pa-6 pb-2 font-weight-bold"
-                  >Labels</v-card-title
-                >
-                <v-card-text class="pa-6 pt-2">
-                  <div class="scroll-y-400 bg-black bg-opacity-20 rounded-lg pa-4">
-                    <div
-                      v-for="(value, key) in container.labels"
-                      :key="key"
-                      class="label-item mb-1 d-flex"
-                    >
-                      <span
-                        class="text-caption font-weight-bold text-primary me-2"
-                        style="min-width: 150px"
-                        >{{ key }}:</span
-                      >
-                      <span
-                        class="text-caption text-grey-lighten-1 break-word"
-                        >{{ value }}</span
-                      >
-                    </div>
-                    <div
-                      v-if="!Object.keys(container.labels || {}).length"
-                      class="text-caption text-grey"
-                    >
-                      No labels found
-                    </div>
-                  </div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-          </v-row>
+    <!-- TAB 1: OVERVIEW -->
+    <div v-if="tab === 'overview' && container" role="tabpanel" class="detail-grid">
+      <!-- Configuration (8 cols) -->
+      <section class="surface-card col-8" aria-labelledby="cont-config-title">
+        <div class="card-header">
+          <span id="cont-config-title" class="card-title">Configuration</span>
         </div>
-      </v-window-item>
-
-      <!-- Logs Tab -->
-      <v-window-item value="logs">
-        <v-card
-          class="glass-card no-hover-card rounded-xl fill-height d-flex flex-column"
-          style="height: calc(100vh - 280px)"
-        >
-          <v-card-title class="pa-4 pb-2 d-flex align-center">
-            <v-icon size="20" class="me-2">mdi-text-box-outline</v-icon>
-            <span class="text-subtitle-2 font-weight-bold">Live Logs</span>
-            <v-spacer></v-spacer>
-            <div class="d-flex align-center gap-4 me-4">
-              <v-switch
-                v-model="showIndex"
-                label="Line Numbers"
-                density="compact"
-                hide-details
-                color="primary"
-                class="mt-0 ml-4"
-              ></v-switch>
-              <v-switch
-                v-model="showTimestamp"
-                label="Timestamps"
-                density="compact"
-                hide-details
-                color="primary"
-                class="mt-0 ml-4"
-              ></v-switch>
+        <div class="card-body">
+          <div class="config-grid">
+            <div class="config-field">
+              <span class="config-label">Service</span>
+              <span class="config-val fw-500">{{ container.service || '-' }}</span>
             </div>
-            <v-btn
-              icon="mdi-delete-sweep-outline"
-              variant="text"
-              size="small"
-              @click="clearLogs"
-              title="Clear View"
-              class="me-1"
-            ></v-btn>
-            <v-btn
-              :icon="
-                autoScroll ? 'mdi-chevron-double-down' : 'mdi-chevron-down'
-              "
-              variant="text"
-              size="small"
-              @click="autoScroll = !autoScroll"
-              :color="autoScroll ? 'primary' : 'grey'"
-              title="Toggle Auto-scroll"
-            ></v-btn>
-          </v-card-title>
-          <v-card-text class="pa-0 flex-grow-1 overflow-hidden">
-            <div
-              ref="logContainer"
-              class="log-viewer bg-black pa-4 fill-height overflow-y-auto"
-            >
-              <div v-for="(log, idx) in logs" :key="idx" class="log-line">
-                <span
-                  v-if="showIndex"
-                  class="log-index me-2 text-caption opacity-50"
-                  >[{{ idx + 1 }}]</span
-                >
-                <span
-                  v-if="showTimestamp && log.timestamp"
-                  class="log-timestamp me-2 text-caption opacity-80"
-                  >{{ formatLogTime(log.timestamp) }}</span
-                >
-                <span class="log-content text-body-2 pre-wrap" v-html="log.htmlContent"></span>
-              </div>
-              <div
-                v-if="logs.length === 0"
-                class="d-flex align-center justify-center fill-height text-grey"
-              >
-                {{
-                  loadingLogs
-                    ? "Connecting to log stream..."
-                    : "No logs available"
-                }}
-              </div>
+            <div class="config-field">
+              <span class="config-label">Stack</span>
+              <span class="config-val fw-500">{{ container.stack || '-' }}</span>
             </div>
-          </v-card-text>
-        </v-card>
-      </v-window-item>
-
-      <!-- Terminal Tab -->
-      <v-window-item value="terminal">
-        <v-card
-          class="glass-card no-hover-card rounded-xl fill-height d-flex flex-column"
-          style="height: calc(100vh - 280px)"
-        >
-          <v-card-title class="pa-4 pb-2 d-flex align-center flex-wrap gap-4">
-            <v-icon size="20" class="me-2">mdi-console</v-icon>
-            <span class="text-subtitle-2 font-weight-bold me-4">Interactive Console</span>
-            
-            <div class="d-flex align-center gap-2">
-              <v-select
-                v-model="selectedShell"
-                :items="['/bin/bash', '/bin/sh', '/bin/zsh', '/bin/ash']"
-                density="compact"
-                hide-details
-                variant="solo-filled"
-                class="glass-input me-2"
-                style="width: 140px;"
-                :disabled="isTerminalConnected"
-              ></v-select>
-              <v-btn
-                :color="isTerminalConnected ? 'error' : 'primary'"
-                variant="flat"
-                @click="toggleTerminalConnection"
-                class="rounded-lg font-weight-bold"
-              >
-                {{ isTerminalConnected ? 'Disconnect' : 'Connect' }}
-              </v-btn>
+            <div class="config-field">
+              <span class="config-label">Node</span>
+              <span class="config-val">{{ container.node || '-' }}</span>
             </div>
-          </v-card-title>
-          <v-card-text class="pa-0 flex-grow-1 overflow-hidden">
-            <div
-              ref="terminalContainer"
-              class="terminal-container bg-black pa-2 fill-height"
-            >
-              <div
-                v-if="!isTerminalConnected"
-                class="d-flex align-center justify-center fill-height text-grey"
-              >
-                Select a shell and click Connect to start an interactive session.
-              </div>
+            <div class="config-field">
+              <span class="config-label">Created At</span>
+              <span class="config-val">{{ new Date(container.created_at).toLocaleString() }}</span>
             </div>
-          </v-card-text>
-        </v-card>
-      </v-window-item>
-    </v-window>
-
-    <!-- Stop Confirmation Dialog -->
-    <v-dialog v-model="stopDialog" max-width="450px">
-      <v-card border flat class="bg-surface rounded-xl">
-        <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
-          <v-icon color="warning" class="me-2">mdi-alert-circle-outline</v-icon>
-          Stop Container?
-        </v-card-title>
-        <v-card-text class="pa-6 pt-2">
-          Are you sure you want to stop container <strong class="font-mono text-warning">{{ container ? formatName(container.names) : '' }}</strong>?
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="stopDialog = false">Cancel</v-btn>
-          <v-btn
-            color="warning"
-            variant="flat"
-            @click="stopContainer"
-            :loading="stopping"
-            class="rounded-lg"
-          >Stop</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Restart Confirmation Dialog -->
-    <v-dialog v-model="restartDialog" max-width="450px">
-      <v-card border flat class="bg-surface rounded-xl">
-        <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
-          <v-icon color="info" class="me-2">mdi-restart</v-icon>
-          Restart Container?
-        </v-card-title>
-        <v-card-text class="pa-6 pt-2">
-          Are you sure you want to restart container <strong class="font-mono text-info">{{ container ? formatName(container.names) : '' }}</strong>?
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="restartDialog = false">Cancel</v-btn>
-          <v-btn
-            color="info"
-            variant="flat"
-            @click="restartContainer"
-            :loading="restarting"
-            class="rounded-lg"
-          >Restart</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="450px">
-      <v-card border flat class="bg-surface rounded-xl">
-        <v-card-title class="pa-6 pb-2 text-h5 font-weight-bold d-flex align-center">
-          <v-icon color="error" class="me-2">mdi-alert-decagram</v-icon>
-          Delete Container?
-        </v-card-title>
-        <v-card-text class="pa-6 pt-2">
-          <p class="mb-4">Are you sure you want to delete container <strong class="font-mono text-error">{{ container ? formatName(container.names) : '' }}</strong>? This action cannot be undone.</p>
-          <v-checkbox
-            v-model="forceDelete"
-            label="Force delete (forcefully kill running container)"
-            color="error"
-            density="compact"
-            hide-details
-            class="mt-2"
-          ></v-checkbox>
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn
-            color="error"
-            variant="flat"
-            @click="deleteContainer"
-            :loading="deleting"
-            class="rounded-lg"
-          >Remove</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Error/Failure Dialog -->
-    <v-dialog v-model="errorDialog" max-width="500px">
-      <v-card border flat class="bg-surface rounded-xl">
-        <v-card-title class="pa-6 pb-2 text-error d-flex align-center">
-          <v-icon color="error" class="me-2">mdi-alert-circle</v-icon>
-          Operation Failed
-        </v-card-title>
-        <v-card-text class="pa-6 pt-2">
-          <p class="mb-4">The container lifecycle operation could not be completed successfully.</p>
-          <div class="bg-black bg-opacity-20 pa-4 rounded-lg font-mono text-caption text-error border border-error border-opacity-20">
-            {{ errorMessage }}
+            <div class="config-field">
+              <span class="config-label">Image</span>
+              <span class="config-val mono text-1">{{ parsedImage.name }}</span>
+            </div>
+            <div class="config-field">
+              <span class="config-label">SHA</span>
+              <span class="config-val mono text-1">{{ parsedImage.sha }}</span>
+            </div>
           </div>
-        </v-card-text>
-        <v-card-actions class="pa-6 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="flat" color="primary" @click="errorDialog = false">Dismiss</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+        </div>
+      </section>
+
+      <!-- Networking (4 cols) -->
+      <section class="surface-card col-4" aria-labelledby="cont-net-title">
+        <div class="card-header">
+          <span id="cont-net-title" class="card-title">Networking</span>
+        </div>
+        <div class="card-body" style="display: flex; flex-direction: column; gap: 16px;">
+          <div class="config-field">
+            <span class="config-label">Attached Networks</span>
+            <div v-if="container.networks?.length" class="flex-row" style="flex-wrap: wrap; gap: 6px; margin-block-start: 4px;">
+              <span v-for="net in container.networks" :key="net" class="status-badge">
+                {{ net }}
+              </span>
+            </div>
+            <span v-else class="text-3" style="font-size: 13px;">No networks attached</span>
+          </div>
+
+          <div class="config-field">
+            <span class="config-label">Exposed Ports</span>
+            <div v-if="container.ports?.length" style="display: flex; flex-direction: column; gap: 4px; margin-block-start: 4px;">
+              <span v-for="(port, idx) in container.ports" :key="idx" class="mono text-1">
+                {{ port.public_port }}:{{ port.private_port }}/{{ port.type }}
+              </span>
+            </div>
+            <span v-else class="text-3" style="font-size: 13px;">No host ports exposed</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Mounts (6 cols — Desktop Table + Mobile 2-Row Cards) -->
+      <section class="surface-card col-6" aria-labelledby="cont-mounts-title">
+        <div class="card-header">
+          <span id="cont-mounts-title" class="card-title">Mounts</span>
+          <span class="count-pill">{{ container.mounts?.length || 0 }}</span>
+        </div>
+
+        <div v-if="!container.mounts?.length" class="card-body text-center text-3">
+          No mounts configured
+        </div>
+
+        <template v-else>
+          <!-- Desktop Table -->
+          <div tabindex="0" role="region" aria-labelledby="cont-mounts-title" class="table-wrapper desktop-table-view">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Destination</th>
+                  <th class="text-end">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(mount, idx) in container.mounts" :key="idx">
+                  <th class="mono text-2" :title="mount.source">{{ mount.source }}</th>
+                  <td class="mono" :title="mount.destination">{{ mount.destination }}</td>
+                  <td class="text-end"><span class="status-badge">{{ mount.type }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile 2-Row Cards -->
+          <div class="card-body mobile-cards-view">
+            <div v-for="(mount, idx) in container.mounts" :key="idx" class="mobile-item-card" style="cursor: default;">
+              <div class="mobile-card-top">
+                <span class="mono fw-500 text-truncate" :title="mount.destination">{{ mount.destination }}</span>
+                <span class="status-badge">{{ mount.type }}</span>
+              </div>
+              <div class="mobile-card-bottom">
+                <span class="mono text-2 text-truncate" :title="mount.source">{{ mount.source }}</span>
+                <span>{{ mount.rw ? 'RW' : 'RO' }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <!-- Environment (6 cols) -->
+      <section class="surface-card col-6" aria-labelledby="cont-env-title">
+        <div class="card-header">
+          <span id="cont-env-title" class="card-title">Environment</span>
+          <span class="count-pill">{{ container.env?.length || 0 }}</span>
+        </div>
+        <div class="card-body">
+          <div v-if="!container.env?.length" class="text-center text-3">
+            No environment variables
+          </div>
+          <div v-else class="env-list">
+            <div v-for="(env, idx) in container.env" :key="idx" class="env-row">
+              <span class="env-key" :title="splitEnv(env).key">{{ splitEnv(env).key }}</span>
+              <span class="env-val mono">{{ splitEnv(env).val }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Labels (12 cols) -->
+      <section class="surface-card col-12" aria-labelledby="cont-labels-title">
+        <div class="card-header">
+          <span id="cont-labels-title" class="card-title">Labels</span>
+          <span class="count-pill">{{ Object.keys(container.labels || {}).length }}</span>
+        </div>
+        <div class="card-body">
+          <div v-if="!Object.keys(container.labels || {}).length" class="text-center text-3">
+            No labels found
+          </div>
+          <div v-else class="env-list">
+            <div v-for="(value, key) in container.labels" :key="key" class="env-row">
+              <span class="env-key" :title="String(key)">{{ key }}</span>
+              <span class="env-val mono">{{ value }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- TAB 2: LOGS -->
+    <div v-else-if="tab === 'logs'" role="tabpanel" class="console-tabpanel">
+      <section class="surface-card console-card">
+        <div class="card-header">
+          <div class="flex-row">
+            <span class="status-dot" :class="loadingLogs ? 'dot-warn' : 'dot-ok'"></span>
+            <span class="card-title">Live Container Logs</span>
+          </div>
+          <div class="flex-row" style="gap: 12px; flex-wrap: wrap;">
+            <label style="font-size: 12px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input v-model="showIndex" type="checkbox" role="switch" class="toggle-switch" /> Line Numbers
+            </label>
+            <label style="font-size: 12px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input v-model="showTimestamp" type="checkbox" role="switch" class="toggle-switch" /> Timestamps
+            </label>
+            <button
+              type="button"
+              class="btn btn-sm"
+              :class="{ 'btn-primary': autoScroll }"
+              @click="autoScroll = !autoScroll"
+            >
+              Auto-scroll
+            </button>
+            <button type="button" class="btn btn-sm" @click="clearLogs">Clear</button>
+          </div>
+        </div>
+
+        <div class="card-body console-card-body">
+          <div ref="logContainer" class="log-viewport console-viewport">
+            <div v-for="(log, idx) in logs" :key="idx" class="log-line">
+              <span v-if="showIndex" class="log-num">{{ idx + 1 }}</span>
+              <span v-if="showTimestamp && log.timestamp" class="log-ts">{{ formatLogTime(log.timestamp) }}</span>
+              <span v-html="log.htmlContent"></span>
+            </div>
+            <div v-if="logs.length === 0" class="text-center text-3" style="padding: 48px 16px;">
+              {{ loadingLogs ? 'Connecting to log stream...' : 'No logs available' }}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- TAB 3: TERMINAL -->
+    <div v-else-if="tab === 'terminal'" role="tabpanel" class="console-tabpanel">
+      <section class="surface-card console-card">
+        <div class="card-header">
+          <div class="flex-row" style="flex-wrap: wrap;">
+            <span class="card-title">Interactive Console</span>
+            <select
+              v-model="selectedShell"
+              class="form-select"
+              style="height: 28px; width: 128px; font-size: 12px;"
+              aria-label="Select shell"
+              :disabled="isTerminalConnected"
+            >
+              <option value="/bin/bash">/bin/bash</option>
+              <option value="/bin/sh">/bin/sh</option>
+              <option value="/bin/zsh">/bin/zsh</option>
+              <option value="/bin/ash">/bin/ash</option>
+            </select>
+            <button
+              type="button"
+              class="btn btn-sm"
+              :class="isTerminalConnected ? 'btn-danger-subtle' : 'btn-primary'"
+              @click="toggleTerminalConnection"
+            >
+              {{ isTerminalConnected ? 'Disconnect' : 'Connect' }}
+            </button>
+          </div>
+          <span v-if="container" class="text-3" style="font-size: 12px;">{{ container.node }}</span>
+        </div>
+
+        <div class="card-body console-card-body">
+          <div
+            ref="terminalContainer"
+            class="log-viewport terminal-viewport console-viewport"
+            style="padding: 8px; overflow: hidden;"
+          >
+            <div v-if="!isTerminalConnected" class="text-center text-3" style="padding: 48px 16px;">
+              Select a shell and click Connect to start an interactive session.
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Stop Modal -->
+    <AppModal v-model="stopDialog" title="Stop Container?" :persistent="stopping">
+      <p class="text-2" style="margin: 0;">
+        Are you sure you want to stop container
+        <strong class="text-1 mono">{{ container ? formatName(container.names) : '' }}</strong>?
+      </p>
+      <template #footer>
+        <button type="button" class="btn" :disabled="stopping" @click="stopDialog = false">Cancel</button>
+        <button type="button" class="btn btn-primary" :disabled="stopping" @click="stopContainer">
+          {{ stopping ? 'Stopping...' : 'Stop' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- Restart Modal -->
+    <AppModal v-model="restartDialog" title="Restart Container?" :persistent="restarting">
+      <p class="text-2" style="margin: 0;">
+        Are you sure you want to restart container
+        <strong class="text-1 mono">{{ container ? formatName(container.names) : '' }}</strong>?
+      </p>
+      <template #footer>
+        <button type="button" class="btn" :disabled="restarting" @click="restartDialog = false">Cancel</button>
+        <button type="button" class="btn btn-primary" :disabled="restarting" @click="restartContainer">
+          {{ restarting ? 'Restarting...' : 'Restart' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- Delete Modal -->
+    <AppModal v-model="deleteDialog" title="Delete Container?" :persistent="deleting">
+      <p class="text-2" style="margin: 0;">
+        Are you sure you want to delete container
+        <strong class="text-1 mono">{{ container ? formatName(container.names) : '' }}</strong>?
+        This action cannot be undone.
+      </p>
+      <label class="nested-box flex-between" style="cursor: pointer;">
+        <span>
+          <strong class="fw-500 text-1" style="display: block;">Force delete</strong>
+          <span class="text-2" style="font-size: 12px;">Forcefully kill the container if it is still running</span>
+        </span>
+        <input v-model="forceDelete" type="checkbox" role="switch" class="toggle-switch" />
+      </label>
+      <template #footer>
+        <button type="button" class="btn" :disabled="deleting" @click="deleteDialog = false">Cancel</button>
+        <button type="button" class="btn btn-danger" :disabled="deleting" @click="deleteContainer">
+          {{ deleting ? 'Removing...' : 'Remove' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- Error Modal -->
+    <AppModal v-model="errorDialog" title="Operation Failed">
+      <p class="text-2" style="margin: 0;">
+        The container lifecycle operation could not be completed successfully.
+      </p>
+      <pre class="log-viewport text-err" style="margin: 0; white-space: pre-wrap;">{{ errorMessage }}</pre>
+      <template #footer>
+        <button type="button" class="btn btn-primary" @click="errorDialog = false">Dismiss</button>
+      </template>
+    </AppModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import Loader from "../../components/Loader.vue";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import "@xterm/xterm/css/xterm.css";
-import { AnsiUp } from "ansi_up";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import Loader from '../../components/Loader.vue';
+import AppModal from '../../components/AppModal.vue';
+import { useTheme } from '../../theme';
+import { splitImageReference } from '../../utils/image';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
+import { AnsiUp } from 'ansi_up';
 
 const ansi = new AnsiUp();
 ansi.use_classes = true;
@@ -586,9 +455,14 @@ interface ContainerDetail {
 
 const route = useRoute();
 const router = useRouter();
+const { isDark, currentTheme } = useTheme();
+
 const container = ref<ContainerDetail | null>(null);
+const parsedImage = computed(() =>
+  splitImageReference(container.value?.image, container.value?.image_id)
+);
 const loading = ref(false);
-const tab = ref("overview");
+const tab = ref<'overview' | 'logs' | 'terminal'>('overview');
 
 const logs = ref<{ timestamp: string; content: string; htmlContent: string }[]>([]);
 const logContainer = ref<HTMLElement | null>(null);
@@ -606,35 +480,37 @@ const stopDialog = ref(false);
 const restartDialog = ref(false);
 const deleteDialog = ref(false);
 const forceDelete = ref(false);
-
 const errorDialog = ref(false);
-const errorMessage = ref("");
+const errorMessage = ref('');
 
-const selectedShell = ref("/bin/sh");
+const selectedShell = ref('/bin/sh');
 const isTerminalConnected = ref(false);
 const terminalContainer = ref<HTMLElement | null>(null);
 let term: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let termSocket: WebSocket | null = null;
+let termResizeObserver: ResizeObserver | null = null;
+let logSocket: WebSocket | null = null;
 
-let abortController: AbortController | null = null;
+const splitEnv = (entry: string) => {
+  const idx = entry.indexOf('=');
+  if (idx === -1) return { key: entry, val: '' };
+  return { key: entry.slice(0, idx), val: entry.slice(idx + 1) };
+};
 
 const fetchDetails = async () => {
   const id = route.params.id as string;
   const node = route.query.node as string;
-
   if (!id || !node) return;
 
   loading.value = true;
   try {
-    const response = await fetch(
-      `/api/containers/detail?id=${id}&node=${node}`,
-    );
+    const response = await fetch(`/api/containers/detail?id=${encodeURIComponent(id)}&node=${encodeURIComponent(node)}`);
     if (response.ok) {
       container.value = await response.json();
     }
   } catch (error) {
-    console.error("Failed to fetch container details:", error);
+    console.error('Failed to fetch container details:', error);
   } finally {
     loading.value = false;
   }
@@ -643,31 +519,28 @@ const fetchDetails = async () => {
 const startLogStream = () => {
   const id = route.params.id as string;
   const node = route.query.node as string;
-
   if (!id || !node) return;
 
   stopLogStream();
-
   loadingLogs.value = true;
   logs.value = [];
 
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const token = localStorage.getItem("halyard_token") || "";
-  const wsUrl = `${protocol}//${window.location.host}/api/containers/logs?id=${id}&node=${node}&token=${encodeURIComponent(token)}`;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const token = localStorage.getItem('halyard_token') || '';
+  const wsUrl = `${protocol}//${window.location.host}/api/containers/logs?id=${encodeURIComponent(id)}&node=${encodeURIComponent(node)}&token=${encodeURIComponent(token)}`;
 
   const socket = new WebSocket(wsUrl);
+  logSocket = socket;
 
   socket.onopen = () => {
     loadingLogs.value = false;
   };
 
   socket.onmessage = (event) => {
-    const lines = event.data.split("\n");
+    const lines = event.data.split('\n');
     lines.forEach((line: string) => {
       if (line.trim()) {
-        const tsMatch = line.match(
-          /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s(.*)$/,
-        );
+        const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s(.*)$/);
         if (tsMatch) {
           logs.value.push({
             timestamp: tsMatch[1],
@@ -676,7 +549,7 @@ const startLogStream = () => {
           });
         } else {
           logs.value.push({
-            timestamp: "",
+            timestamp: '',
             content: line,
             htmlContent: ansi.ansi_to_html(line),
           });
@@ -698,23 +571,19 @@ const startLogStream = () => {
   };
 
   socket.onerror = (error) => {
-    console.error("WebSocket error:", error);
+    console.error('WebSocket error:', error);
     loadingLogs.value = false;
   };
 
   socket.onclose = () => {
-    console.log("WebSocket connection closed");
     loadingLogs.value = false;
   };
-
-  (window as any)._logSocket = socket;
 };
 
 const stopLogStream = () => {
-  const socket = (window as any)._logSocket;
-  if (socket) {
-    socket.close();
-    (window as any)._logSocket = null;
+  if (logSocket) {
+    logSocket.close();
+    logSocket = null;
   }
 };
 
@@ -728,17 +597,15 @@ const startContainer = async () => {
   try {
     const response = await fetch(
       `/api/containers/start?id=${container.value.id}&node=${container.value.node}`,
-      { method: "POST" }
+      { method: 'POST' }
     );
     if (response.ok) {
       await fetchDetails();
     } else {
-      const err = await response.text();
-      errorMessage.value = err;
+      errorMessage.value = await response.text();
       errorDialog.value = true;
     }
   } catch (error) {
-    console.error("Failed to start container:", error);
     errorMessage.value = String(error);
     errorDialog.value = true;
   } finally {
@@ -757,17 +624,15 @@ const stopContainer = async () => {
   try {
     const response = await fetch(
       `/api/containers/stop?id=${container.value.id}&node=${container.value.node}`,
-      { method: "POST" }
+      { method: 'POST' }
     );
     if (response.ok) {
       await fetchDetails();
     } else {
-      const err = await response.text();
-      errorMessage.value = err;
+      errorMessage.value = await response.text();
       errorDialog.value = true;
     }
   } catch (error) {
-    console.error("Failed to stop container:", error);
     errorMessage.value = String(error);
     errorDialog.value = true;
   } finally {
@@ -786,17 +651,15 @@ const restartContainer = async () => {
   try {
     const response = await fetch(
       `/api/containers/restart?id=${container.value.id}&node=${container.value.node}`,
-      { method: "POST" }
+      { method: 'POST' }
     );
     if (response.ok) {
       await fetchDetails();
     } else {
-      const err = await response.text();
-      errorMessage.value = err;
+      errorMessage.value = await response.text();
       errorDialog.value = true;
     }
   } catch (error) {
-    console.error("Failed to restart container:", error);
     errorMessage.value = String(error);
     errorDialog.value = true;
   } finally {
@@ -815,23 +678,36 @@ const deleteContainer = async () => {
   try {
     const response = await fetch(
       `/api/containers?id=${container.value.id}&node=${container.value.node}&force=${forceDelete.value}`,
-      { method: "DELETE" }
+      { method: 'DELETE' }
     );
     if (response.ok) {
       router.back();
     } else {
-      const err = await response.text();
-      errorMessage.value = err;
+      errorMessage.value = await response.text();
       errorDialog.value = true;
     }
   } catch (error) {
-    console.error("Failed to delete container:", error);
     errorMessage.value = String(error);
     errorDialog.value = true;
   } finally {
     deleting.value = false;
   }
 };
+
+const getTerminalTheme = () => {
+  const c = currentTheme.value.colors;
+  return {
+    background: c.background,
+    foreground: c.textPrimary,
+    cursor: c.accent,
+  };
+};
+
+watch(isDark, () => {
+  if (term) {
+    term.options.theme = getTerminalTheme();
+  }
+});
 
 const toggleTerminalConnection = () => {
   if (isTerminalConnected.value) {
@@ -844,44 +720,45 @@ const toggleTerminalConnection = () => {
 const connectTerminal = () => {
   const id = route.params.id as string;
   const node = route.query.node as string;
-
   if (!id || !node) return;
 
   disconnectTerminal();
-
   isTerminalConnected.value = true;
 
   term = new Terminal({
     cursorBlink: true,
-    fontSize: 14,
-    fontFamily: "Roboto Mono, Courier New, monospace",
-    theme: {
-      background: "#000000",
-      foreground: "#ffffff",
-      cursor: "#ffffff",
-    },
+    fontSize: 13,
+    fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, monospace',
+    theme: getTerminalTheme(),
   });
 
   fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
 
   if (terminalContainer.value) {
-    terminalContainer.value.innerHTML = "";
+    terminalContainer.value.innerHTML = '';
     term.open(terminalContainer.value);
     fitAddon.fit();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      termResizeObserver = new ResizeObserver(() => {
+        sendTerminalSize();
+      });
+      termResizeObserver.observe(terminalContainer.value);
+    }
   }
 
-  term.write("Connecting to shell " + selectedShell.value + "...\r\n");
+  term.write(`Connecting to shell ${selectedShell.value}...\r\n`);
 
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const token = localStorage.getItem("halyard_token") || "";
-  const wsUrl = `${protocol}//${window.location.host}/api/containers/exec?id=${id}&node=${node}&shell=${encodeURIComponent(selectedShell.value)}&token=${encodeURIComponent(token)}`;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const token = localStorage.getItem('halyard_token') || '';
+  const wsUrl = `${protocol}//${window.location.host}/api/containers/exec?id=${encodeURIComponent(id)}&node=${encodeURIComponent(node)}&shell=${encodeURIComponent(selectedShell.value)}&token=${encodeURIComponent(token)}`;
 
   termSocket = new WebSocket(wsUrl);
-  termSocket.binaryType = "arraybuffer";
+  termSocket.binaryType = 'arraybuffer';
 
   termSocket.onopen = () => {
-    term?.write("\r\n--- Shell Connected ---\r\n\r\n");
+    term?.write('\r\n--- Shell Connected ---\r\n\r\n');
     sendTerminalSize();
   };
 
@@ -892,13 +769,13 @@ const connectTerminal = () => {
   };
 
   termSocket.onclose = () => {
-    term?.write("\r\n--- Shell Disconnected ---\r\n");
+    term?.write('\r\n--- Shell Disconnected ---\r\n');
     isTerminalConnected.value = false;
   };
 
   termSocket.onerror = (err) => {
-    console.error("Terminal WebSocket error:", err);
-    term?.write("\r\nError: Connection failed\r\n");
+    console.error('Terminal WebSocket error:', err);
+    term?.write('\r\nError: Connection failed\r\n');
     isTerminalConnected.value = false;
   };
 
@@ -908,22 +785,23 @@ const connectTerminal = () => {
     }
   });
 
-  window.addEventListener("resize", handleWindowResize);
+  window.addEventListener('resize', handleWindowResize);
 };
 
 const disconnectTerminal = () => {
-  window.removeEventListener("resize", handleWindowResize);
-
+  window.removeEventListener('resize', handleWindowResize);
+  if (termResizeObserver) {
+    termResizeObserver.disconnect();
+    termResizeObserver = null;
+  }
   if (termSocket) {
     termSocket.close();
     termSocket = null;
   }
-
   if (term) {
     term.dispose();
     term = null;
   }
-
   fitAddon = null;
   isTerminalConnected.value = false;
 };
@@ -931,11 +809,13 @@ const disconnectTerminal = () => {
 const sendTerminalSize = () => {
   if (termSocket && termSocket.readyState === WebSocket.OPEN && term && fitAddon) {
     fitAddon.fit();
-    termSocket.send(JSON.stringify({
-      type: "resize",
-      cols: term.cols,
-      rows: term.rows
-    }));
+    termSocket.send(
+      JSON.stringify({
+        type: 'resize',
+        cols: term.cols,
+        rows: term.rows,
+      })
+    );
   }
 };
 
@@ -944,12 +824,11 @@ const handleWindowResize = () => {
 };
 
 watch(tab, (newTab) => {
-  if (newTab === "logs") {
+  if (newTab === 'logs') {
     startLogStream();
     disconnectTerminal();
-  } else if (newTab === "terminal") {
+  } else if (newTab === 'terminal') {
     stopLogStream();
-    // Don't auto-connect, let the user choose
   } else {
     stopLogStream();
     disconnectTerminal();
@@ -957,14 +836,14 @@ watch(tab, (newTab) => {
 });
 
 const formatLogTime = (ts: string) => {
-  if (!ts) return "";
+  if (!ts) return '';
   try {
     const date = new Date(ts);
     return date.toLocaleTimeString([], {
       hour12: false,
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
   } catch {
     return ts.substring(11, 19);
@@ -972,26 +851,31 @@ const formatLogTime = (ts: string) => {
 };
 
 const formatName = (names: string[]) => {
-  if (!names || names.length === 0) return "Unknown";
-  return names[0].replace(/^\//, "");
+  if (!names || names.length === 0) return 'Unknown';
+  return names[0].replace(/^\//, '');
 };
 
-const getStateColor = (state: string) => {
-  switch (state.toLowerCase()) {
-    case "running":
-      return "success";
-    case "exited":
-      return "error";
-    case "paused":
-      return "warning";
+const formatStateLabel = (state: string) => {
+  if (!state) return 'Unknown';
+  return state.charAt(0).toUpperCase() + state.slice(1).toLowerCase();
+};
+
+const getStateDotClass = (state: string) => {
+  switch ((state || '').toLowerCase()) {
+    case 'running':
+      return 'dot-ok';
+    case 'exited':
+      return 'dot-err';
+    case 'paused':
+      return 'dot-warn';
     default:
-      return "grey";
+      return '';
   }
 };
 
 onMounted(() => {
   fetchDetails();
-  if (tab.value === "logs") {
+  if (tab.value === 'logs') {
     startLogStream();
   }
 });
@@ -1003,61 +887,30 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.min-h-400 {
-  min-height: 400px;
+.viewport-fit-active {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
-.log-viewer {
-  background-color: #000 !important;
+.console-tabpanel,
+.console-card,
+.console-card-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.log-line,
-.log-line span {
-  font-family: var(--font-mono) !important;
-  font-size: 0.85rem !important;
-  line-height: 1.4 !important;
-  font-weight: 700 !important;
+.console-viewport {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
-.log-timestamp {
-  color: var(--ansi-cyan, #22d3ee) !important;
-}
-
-.log-index {
-  color: var(--ansi-white, #757575) !important;
-}
-
-.log-content {
-  color: #f8fafc !important; /* Slate-50 (off-white) */
-}
-
-.log-line:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.gap-2 {
-  gap: 8px;
-}
-
-.terminal-container {
-  background-color: #000000 !important;
+.terminal-viewport :deep(.xterm) {
   height: 100%;
 }
 
-.terminal-container :deep(.xterm) {
-  padding: 8px;
-  height: 100%;
-}
-
-.terminal-container :deep(.xterm-viewport) {
-  background-color: #000000 !important;
-}
-
-.glass-card.no-hover-card:hover {
-  transform: none !important;
-  background: rgba(30, 41, 59, 0.4) !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  box-shadow: none !important;
+.terminal-viewport :deep(.xterm-viewport) {
+  background-color: var(--surface-0) !important;
 }
 </style>
-

@@ -1,213 +1,224 @@
 <template>
-  <div class="fill-height d-flex flex-column pa-4">
-    <!-- Header -->
-    <div class="d-flex align-center mb-6">
-      <v-btn
-        icon="mdi-arrow-left"
-        variant="text"
-        @click="$router.back()"
-        class="me-2"
-      ></v-btn>
-      <div v-if="network">
-        <h1 class="text-h4 font-weight-bold d-flex align-center">
-          Network: {{ network.name }}
-          <v-chip
-            color="primary"
-            size="small"
-            label
-            class="ms-4 text-uppercase font-weight-bold"
-          >
-            {{ network.driver }}
-          </v-chip>
+  <div class="section-block" style="gap: 24px;">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="status-line">
+          <button type="button" class="section-link" @click="$router.push('/swarm/networks')">
+            ← Networks
+          </button>
+        </div>
+        <h1 class="page-title">
+          <span>{{ network ? `Network: ${network.name}` : 'Network Detail' }}</span>
+          <span v-if="network" class="status-badge">{{ network.driver }}</span>
         </h1>
-        <p class="text-subtitle-1 text-grey-lighten-1">
-          {{ network.scope }} scope // {{ network.id.substring(0, 12) }}
+        <p v-if="network" class="page-subtitle">
+          {{ network.scope }} scope · <span class="mono">{{ network.id.substring(0, 12) }}</span>
         </p>
       </div>
-      <div v-else>
-        <h1 class="text-h4 font-weight-bold">Network Detail</h1>
+      <div class="header-actions">
+        <button type="button" class="btn btn-icon" :disabled="loading" aria-label="Refresh" @click="fetchDetail">
+          <v-icon size="16">mdi-refresh</v-icon>
+        </button>
       </div>
-      <v-spacer></v-spacer>
-      <v-btn
-        icon="mdi-refresh"
-        @click="fetchDetail"
-        :loading="loading"
-        size="x-small"
-        class="refresh-btn"
-        flat
-      ></v-btn>
     </div>
 
     <Loader :loading="loading" />
 
-    <v-row v-if="network">
-      <!-- Info Cards -->
-      <v-col cols="12" md="4">
-        <v-card class="glass-card h-100 pa-4">
-          <div class="d-flex align-center mb-4">
-            <v-icon color="primary" class="me-2">mdi-ip-network</v-icon>
-            <span class="text-subtitle-2 font-weight-bold text-grey">IPAM Configuration</span>
-          </div>
-          <div v-if="network.ipam_configs && network.ipam_configs.length">
-            <div v-for="(config, idx) in network.ipam_configs" :key="idx" class="mb-4">
-              <div class="text-caption text-grey">Subnet</div>
-              <div class="text-h6 font-mono">{{ config.subnet || '-' }}</div>
-              <div class="text-caption text-grey mt-2">Gateway</div>
-              <div class="text-h6 font-mono">{{ config.gateway || '-' }}</div>
-            </div>
-          </div>
-          <div v-else class="text-body-2 text-grey">No IPAM configuration found.</div>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="4">
-        <v-card class="glass-card h-100 pa-4">
-          <div class="d-flex align-center mb-4">
-            <v-icon color="secondary" class="me-2">mdi-cog-outline</v-icon>
-            <span class="text-subtitle-2 font-weight-bold text-grey">Properties</span>
-          </div>
-          <v-list density="compact" bg-color="transparent">
-            <v-list-item class="px-0">
-              <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 80px">Internal</span></template>
-              <v-chip size="x-small" :color="network.internal ? 'warning' : 'grey'">{{ network.internal }}</v-chip>
-            </v-list-item>
-            <v-list-item class="px-0">
-              <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 80px">Attachable</span></template>
-              <v-chip size="x-small" :color="network.attachable ? 'success' : 'grey'">{{ network.attachable }}</v-chip>
-            </v-list-item>
-            <v-list-item class="px-0">
-              <template v-slot:prepend><span class="text-caption text-grey me-4" style="width: 80px">Ingress</span></template>
-              <v-chip size="x-small" :color="network.ingress ? 'info' : 'grey'">{{ network.ingress }}</v-chip>
-            </v-list-item>
-          </v-list>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="4">
-        <v-card class="glass-card h-100 pa-4">
-          <div class="d-flex align-center mb-4">
-            <v-icon color="success" class="me-2">mdi-clock-outline</v-icon>
-            <span class="text-subtitle-2 font-weight-bold text-grey">Metadata</span>
-          </div>
-          <div class="text-caption text-grey">Created At</div>
-          <div class="text-body-2 mb-4">{{ new Date(network.created_at).toLocaleString() }}</div>
-          
-          <div v-if="network.labels && Object.keys(network.labels).length">
-            <div class="text-caption text-grey mb-1">Labels</div>
-            <div class="d-flex flex-wrap gap-1">
-              <v-chip v-for="(v, k) in network.labels" :key="k" size="x-small" variant="tonal" class="font-mono">
-                {{ k }}={{ v }}
-              </v-chip>
-            </div>
-          </div>
-        </v-card>
-      </v-col>
-
-      <!-- Connected Containers -->
-      <v-col cols="12">
-        <v-card class="glass-card">
-          <v-card-title class="pa-6 pb-2 d-flex align-center flex-wrap justify-space-between">
-            <div class="d-flex align-center">
-              <v-icon size="20" class="me-2">mdi-cube-outline</v-icon>
-              <span class="font-weight-bold">Connected Containers</span>
-            </div>
-            <div class="d-flex align-center gap-4 mt-2 mt-sm-0">
-              <v-text-field
-                v-model="searchQuery"
-                prepend-inner-icon="mdi-magnify"
-                placeholder="Search containers..."
-                variant="solo-filled"
-                density="compact"
-                flat
-                hide-details
-                rounded="lg"
-                class="search-input glass-input"
-                style="width: 240px"
-              ></v-text-field>
-              <v-chip size="small" variant="tonal">{{ network.containers?.length || 0 }} Containers</v-chip>
-            </div>
-          </v-card-title>
-          
-          <v-card-text class="pa-0">
-            <v-data-table
-              :headers="containerHeaders"
-              :items="network.containers || []"
-              :search="searchQuery"
-              class="bg-transparent"
-              density="comfortable"
-              hover
-              items-per-page="25"
-              @click:row="goToContainer"
+    <div v-if="network" class="detail-grid">
+      <!-- IPAM Configuration (4 cols) -->
+      <section class="surface-card col-4" aria-labelledby="net-ipam-title">
+        <div class="card-header">
+          <span id="net-ipam-title" class="card-title">IPAM Configuration</span>
+        </div>
+        <div class="card-body">
+          <div v-if="network.ipam_configs && network.ipam_configs.length" style="display: flex; flex-direction: column; gap: 14px;">
+            <div
+              v-for="(config, idx) in network.ipam_configs"
+              :key="idx"
+              class="config-grid"
+              style="grid-template-columns: 1fr; gap: 12px;"
+              :style="idx > 0 ? 'padding-block-start: 14px; border-block-start: 1px solid var(--border-2);' : ''"
             >
-              <template v-slot:item.name="{ value }">
-                <span class="text-body-2 font-weight-bold">{{ value }}</span>
-              </template>
-              <template v-slot:item.ipv4="{ value }">
-                <code class="text-caption">{{ value || '-' }}</code>
-              </template>
-              <template v-slot:item.ipv6="{ value }">
-                <code class="text-caption">{{ value || '-' }}</code>
-              </template>
-              <template v-slot:item.id="{ value }">
-                <code class="text-caption text-grey">{{ value.substring(0, 12) }}</code>
-              </template>
-            </v-data-table>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+              <div class="config-field">
+                <span class="config-label">Subnet</span>
+                <span class="config-val mono">{{ config.subnet || '—' }}</span>
+              </div>
+              <div class="config-field">
+                <span class="config-label">Gateway</span>
+                <span class="config-val mono">{{ config.gateway || '—' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-3">No IPAM configuration found.</div>
+        </div>
+      </section>
+
+      <!-- Properties (4 cols) -->
+      <section class="surface-card col-4" aria-labelledby="net-props-title">
+        <div class="card-header">
+          <span id="net-props-title" class="card-title">Properties</span>
+        </div>
+        <div class="card-body">
+          <div class="config-grid" style="grid-template-columns: 1fr;">
+            <div class="flex-between">
+              <span class="config-label">Internal</span>
+              <span class="status-badge">{{ network.internal ? 'Yes' : 'No' }}</span>
+            </div>
+            <div class="flex-between">
+              <span class="config-label">Attachable</span>
+              <span class="status-badge">{{ network.attachable ? 'Yes' : 'No' }}</span>
+            </div>
+            <div class="flex-between">
+              <span class="config-label">Ingress</span>
+              <span class="status-badge">{{ network.ingress ? 'Yes' : 'No' }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Metadata (4 cols) -->
+      <section class="surface-card col-4" aria-labelledby="net-meta-title">
+        <div class="card-header">
+          <span id="net-meta-title" class="card-title">Metadata</span>
+        </div>
+        <div class="card-body" style="display: flex; flex-direction: column; gap: 14px;">
+          <div class="config-field">
+            <span class="config-label">Created At</span>
+            <span class="config-val">{{ new Date(network.created_at).toLocaleString() }}</span>
+          </div>
+          <div v-if="network.labels && Object.keys(network.labels).length" class="config-field">
+            <span class="config-label">Labels</span>
+            <div class="env-list" style="margin-block-start: 4px;">
+              <div v-for="(v, k) in network.labels" :key="k" class="env-row">
+                <span class="env-key" :title="String(k)">{{ k }}</span>
+                <span class="env-val mono">{{ v }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Connected Containers (12 cols) -->
+      <section class="col-12 section-block" aria-labelledby="net-containers-title">
+        <div class="section-header">
+          <div id="net-containers-title" class="section-title">
+            <span>Connected Containers</span>
+            <span class="count-pill">{{ filteredContainers.length }}</span>
+          </div>
+          <input
+            v-model="searchQuery"
+            type="search"
+            class="search-input"
+            placeholder="Search containers..."
+            aria-label="Search containers"
+          />
+        </div>
+
+        <!-- Desktop Table -->
+        <div class="surface-card desktop-table-view">
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th style="width: 170px;">IPv4 Address</th>
+                  <th style="width: 200px;">IPv6 Address</th>
+                  <th style="width: 140px;">Container ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="filteredContainers.length === 0">
+                  <td colspan="4" class="text-center text-3">No connected containers found.</td>
+                </tr>
+                <tr
+                  v-for="cont in filteredContainers"
+                  :key="cont.id"
+                  class="clickable-row"
+                  @click="goToContainer(cont)"
+                >
+                  <th>{{ cont.name }}</th>
+                  <td class="mono text-2">{{ cont.ipv4 || '—' }}</td>
+                  <td class="mono text-2">{{ cont.ipv6 || '—' }}</td>
+                  <td class="mono text-3">{{ cont.id.substring(0, 12) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Mobile 2-Row Cards -->
+        <div class="mobile-cards-view">
+          <div
+            v-for="cont in filteredContainers"
+            :key="cont.id"
+            class="mobile-item-card"
+            role="button"
+            tabindex="0"
+            @click="goToContainer(cont)"
+            @keydown.enter="goToContainer(cont)"
+          >
+            <div class="mobile-card-top">
+              <span class="fw-500 text-1 text-truncate">{{ cont.name }}</span>
+              <span class="mono text-3">{{ cont.id.substring(0, 12) }}</span>
+            </div>
+            <div class="mobile-card-bottom">
+              <span class="mono"><span class="text-3">IPv4:</span> {{ cont.ipv4 || '—' }}</span>
+              <span class="mono"><span class="text-3">IPv6:</span> {{ cont.ipv6 || '—' }}</span>
+            </div>
+          </div>
+          <div class="mobile-cards-count">{{ filteredContainers.length }} items</div>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import Loader from '../../components/Loader.vue'
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import Loader from '../../components/Loader.vue';
 
-const searchQuery = ref('')
+const route = useRoute();
+const router = useRouter();
+const searchQuery = ref('');
+const network = ref<any>(null);
+const loading = ref(true);
 
-const route = useRoute()
-const router = useRouter()
-const network = ref<any>(null)
-const loading = ref(true)
-
-const containerHeaders = [
-  { title: 'Name', key: 'name', sortable: true, align: 'start' as const },
-  { title: 'IPv4 Address', key: 'ipv4', sortable: true, align: 'start' as const },
-  { title: 'IPv6 Address', key: 'ipv6', sortable: true, align: 'start' as const },
-  { title: 'Container ID', key: 'id', sortable: true, align: 'start' as const },
-]
+const filteredContainers = computed(() => {
+  const list = network.value?.containers || [];
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((c: any) => {
+    return (
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.ipv4 || '').toLowerCase().includes(q) ||
+      (c.ipv6 || '').toLowerCase().includes(q) ||
+      (c.id || '').toLowerCase().includes(q)
+    );
+  });
+});
 
 const fetchDetail = async () => {
-  const id = route.params.id as string
-  if (!id) return
+  const id = route.params.id as string;
+  if (!id) return;
 
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await fetch(`/api/networks/detail?id=${id}`)
+    const response = await fetch(`/api/networks/detail?id=${encodeURIComponent(id)}`);
     if (response.ok) {
-      network.value = await response.json()
-    } else {
-      console.error('Failed to fetch network detail')
+      network.value = await response.json();
     }
   } catch (err) {
-    console.error('Error fetching network detail:', err)
+    console.error('Error fetching network detail:', err);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
-const goToContainer = (_: any, { item }: any) => {
-  // Note: We don't have the node ID here easily, but many containers 
-  // in the same network might be on different nodes.
-  // We'll try to navigate if we can find a way to resolve the node.
-  // For now, we'll just link to the detail if we have enough info.
-  router.push(`/swarm/containers/${item.id}`)
-}
+const goToContainer = (item: any) => {
+  router.push(`/swarm/containers/${item.id}`);
+};
 
-onMounted(fetchDetail)
+onMounted(fetchDetail);
 </script>
-
-<style scoped>
-.gap-1 { gap: 4px; }
-</style>

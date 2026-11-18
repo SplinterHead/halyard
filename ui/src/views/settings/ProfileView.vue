@@ -1,196 +1,187 @@
 <template>
-  <div class="h-100 d-flex flex-column gap-4">
-    <!-- Header -->
-    <div class="d-flex align-center justify-space-between glass-panel px-6 py-4 rounded-lg">
-      <div class="d-flex align-center gap-4">
-        <v-btn icon="mdi-arrow-left" variant="text" size="small" @click="$router.back()"></v-btn>
-        <div>
-          <h2 class="text-h5 font-weight-bold text-gradient mb-1">User Profile</h2>
-          <div class="text-caption text-grey">Manage your account and security settings</div>
+  <div class="section-block" style="gap: 24px;">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="status-line">
+          <button type="button" class="section-link" @click="$router.back()">← Back</button>
         </div>
+        <h1 class="page-title">User Profile</h1>
+        <p class="page-subtitle">Manage your operator account, password, and appearance preferences.</p>
       </div>
     </div>
 
-    <!-- Content -->
-    <v-row class="flex-grow-1">
-      <!-- Profile Info -->
-      <v-col cols="12" md="6">
-        <v-card class="glass-panel h-100 rounded-lg pa-6 d-flex flex-column align-center justify-center">
-          <v-avatar size="256" color="primary" variant="tonal" class="mb-6" style="border: 4px solid rgba(139, 92, 246, 0.5)">
-            <span class="text-h1 font-weight-bold">{{ userInitials }}</span>
-          </v-avatar>
-          <h3 class="text-h4 font-weight-bold mb-2">{{ user.real_name || 'Operator' }}</h3>
-          <div class="text-subtitle-1 text-grey">{{ user.username || 'unknown' }}</div>
-        </v-card>
-      </v-col>
+    <div class="detail-grid">
+      <!-- Profile Info (5 cols) -->
+      <section class="surface-card col-5" aria-labelledby="profile-account-title">
+        <div class="card-header">
+          <span id="profile-account-title" class="card-title">Operator Account</span>
+        </div>
+        <div class="card-body d-flex flex-column align-center justify-center text-center" style="padding: 36px 20px; gap: 12px;">
+          <div class="profile-avatar">{{ userInitials }}</div>
+          <div class="fw-600 text-1" style="font-size: 18px;">{{ user.real_name || 'Operator' }}</div>
+          <div class="mono text-2">{{ user.username || 'unknown' }}</div>
+        </div>
+      </section>
 
-      <!-- Password Change -->
-      <v-col cols="12" md="6">
-        <v-card class="glass-panel h-100 rounded-lg pa-6">
-          <h3 class="text-h6 font-weight-bold mb-4">Change Password</h3>
-          <v-divider class="mb-6 border-opacity-25" color="white"></v-divider>
-
-          <v-form ref="passwordForm" @submit.prevent="handlePasswordUpdate" v-model="formValid">
-            <v-alert
-              v-if="statusMessage"
-              :type="statusType"
-              variant="tonal"
-              density="compact"
-              class="mb-6 text-caption rounded-lg border-s-4"
-              closable
-              @click:close="statusMessage = ''"
-            >
-              {{ statusMessage }}
-            </v-alert>
-
-            <div class="mb-4">
-              <div class="text-caption font-weight-bold mb-2">
-                Current Password
-              </div>
-              <v-text-field
-                v-model="currentPassword"
-                type="password"
-                placeholder="••••••••"
-                prepend-inner-icon="mdi-lock-outline"
-                variant="outlined"
-                density="comfortable"
-                color="primary"
-                :rules="[v => !!v || 'Required']"
-                hide-details="auto"
-                bg-color="rgba(0, 0, 0, 0.2)"
-                required
-              ></v-text-field>
-            </div>
-
-            <div class="mb-4">
-              <div class="text-caption font-weight-bold mb-2">
-                New Password
-              </div>
-              <v-text-field
-                v-model="newPassword"
-                type="password"
-                placeholder="••••••••"
-                prepend-inner-icon="mdi-lock-reset"
-                variant="outlined"
-                density="comfortable"
-                color="primary"
-                :rules="[
-                  v => !!v || 'Required',
-                  v => v.length >= 8 || 'Must be at least 8 characters'
-                ]"
-                hide-details="auto"
-                bg-color="rgba(0, 0, 0, 0.2)"
-                required
-              ></v-text-field>
-            </div>
-
-            <div class="mb-6">
-              <div class="text-caption font-weight-bold mb-2">
-                Confirm New Password
-              </div>
-              <v-text-field
-                v-model="confirmPassword"
-                type="password"
-                placeholder="••••••••"
-                prepend-inner-icon="mdi-lock-check"
-                variant="outlined"
-                density="comfortable"
-                color="primary"
-                :rules="[
-                  v => !!v || 'Required',
-                  v => v === newPassword || 'Passwords must match'
-                ]"
-                hide-details="auto"
-                bg-color="rgba(0, 0, 0, 0.2)"
-                required
-              ></v-text-field>
-            </div>
-
-            <v-btn
-              type="submit"
-              color="primary"
-              size="large"
-              class="font-weight-bold tracking-wide w-100"
-              :loading="loading"
-              :disabled="!formValid"
-              elevation="4"
-              prepend-icon="mdi-content-save"
-            >
-              Update Password
-            </v-btn>
-          </v-form>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Appearance Settings -->
-    <v-row>
-      <v-col cols="12">
-        <v-card class="glass-panel rounded-lg pa-6">
-          <div class="d-flex align-center justify-space-between mb-4">
-            <h3 class="text-h6 font-weight-bold">Appearance Settings</h3>
-            <v-btn color="primary" @click="savePreferences" :loading="savingPrefs" flat>
-              Save Preferences
-            </v-btn>
-          </div>
-          <v-divider class="mb-6 border-opacity-25" color="white"></v-divider>
-          
-          <div class="d-flex align-center mb-6">
-            <v-icon color="primary" class="me-4" size="32">mdi-palette</v-icon>
-            <div>
-              <div class="text-h6 font-weight-bold">Container Log Colors</div>
-              <div class="text-caption text-grey">
-                Customize the standard ANSI colors used to format container logs.
-              </div>
-            </div>
-          </div>
-
-          <v-row class="mt-4">
-            <v-col cols="12" sm="6" md="3" v-for="color in colors" :key="color.key">
-              <div class="d-flex align-center mb-2">
-                <span class="text-subtitle-2 text-capitalize me-auto">{{ color.label }}</span>
-              </div>
-              <v-text-field
-                v-model="preferences['ansi-' + color.key]"
-                variant="outlined"
-                density="compact"
-                hide-details
-                placeholder="#000000"
-              >
-                <template v-slot:append-inner>
-                  <input
-                    type="color"
-                    v-model="preferences['ansi-' + color.key]"
-                    class="color-picker-input cursor-pointer"
-                  />
-                </template>
-              </v-text-field>
-            </v-col>
-          </v-row>
-
-          <v-alert
-            v-if="prefsSuccess"
-            type="success"
-            variant="tonal"
-            density="compact"
-            class="mt-6"
-            closable
-            @click:close="prefsSuccess = false"
+      <!-- Change Password (7 cols) -->
+      <section class="surface-card col-7" aria-labelledby="profile-password-title">
+        <div class="card-header">
+          <span id="profile-password-title" class="card-title">Change Password</span>
+        </div>
+        <form class="card-body" style="display: flex; flex-direction: column; gap: 14px;" @submit.prevent="handlePasswordUpdate">
+          <div
+            v-if="statusMessage"
+            class="alert-banner"
+            :class="statusType === 'error' ? 'alert-err' : 'alert-ok'"
           >
-            Preferences saved successfully
-          </v-alert>
-        </v-card>
-      </v-col>
-    </v-row>
+            <span>{{ statusMessage }}</span>
+            <button type="button" class="btn btn-sm" @click="statusMessage = ''">Dismiss</button>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="pw-current">Current Password</label>
+            <input
+              id="pw-current"
+              v-model="currentPassword"
+              type="password"
+              class="form-input"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="pw-new">New Password</label>
+            <input
+              id="pw-new"
+              v-model="newPassword"
+              type="password"
+              class="form-input"
+              placeholder="••••••••"
+              required
+            />
+            <span v-if="newPassword && newPassword.length < 8" class="form-error">
+              Must be at least 8 characters
+            </span>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="pw-confirm">Confirm New Password</label>
+            <input
+              id="pw-confirm"
+              v-model="confirmPassword"
+              type="password"
+              class="form-input"
+              placeholder="••••••••"
+              required
+            />
+            <span v-if="confirmPassword && confirmPassword !== newPassword" class="form-error">
+              Passwords must match
+            </span>
+          </div>
+
+          <div class="d-flex justify-end" style="margin-block-start: 4px;">
+            <button
+              type="submit"
+              class="btn btn-primary"
+              :disabled="loading || !passwordFormValid"
+            >
+              {{ loading ? 'Updating...' : 'Update Password' }}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Appearance & Log Colors (12 cols) -->
+      <section class="surface-card col-12" aria-labelledby="profile-appearance-title">
+        <div class="card-header">
+          <span id="profile-appearance-title" class="card-title">Appearance & Log Colors</span>
+          <button type="button" class="btn btn-primary btn-sm" :disabled="savingPrefs" @click="savePreferences">
+            {{ savingPrefs ? 'Saving...' : 'Save Preferences' }}
+          </button>
+        </div>
+
+        <div class="card-body" style="display: flex; flex-direction: column; gap: 20px;">
+          <div class="flex-between" style="flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div class="fw-500 text-1">Color Scheme</div>
+              <div class="text-2" style="font-size: 12.5px;">Switch between Deep Slate (dark), Alabaster (light), or system default.</div>
+            </div>
+            <div class="segmented-control" role="group" aria-label="Color scheme">
+              <button
+                type="button"
+                class="segmented-btn"
+                :aria-pressed="schemePreference === 'system'"
+                @click="setScheme('system')"
+              >
+                System ({{ systemMode === 'dark' ? 'Dark' : 'Light' }})
+              </button>
+              <button
+                type="button"
+                class="segmented-btn"
+                :aria-pressed="schemePreference === 'dark'"
+                @click="setScheme('dark')"
+              >
+                Dark (Deep Slate)
+              </button>
+              <button
+                type="button"
+                class="segmented-btn"
+                :aria-pressed="schemePreference === 'light'"
+                @click="setScheme('light')"
+              >
+                Light (Alabaster)
+              </button>
+            </div>
+          </div>
+
+          <div style="border-block-start: 1px solid var(--border-2); padding-block-start: 16px;">
+            <div class="fw-500 text-1" style="margin-block-end: 4px;">Container Log ANSI Colors</div>
+            <div class="text-2" style="font-size: 12.5px; margin-block-end: 14px;">
+              Customize the standard ANSI colors used to format container logs.
+            </div>
+
+            <div class="ansi-grid">
+              <div v-for="color in colors" :key="color.key" class="nested-box flex-between" style="gap: 10px;">
+                <div class="config-field" style="flex: 1; min-width: 0;">
+                  <label class="config-label" :for="`ansi-${color.key}`">{{ color.label }}</label>
+                  <input
+                    :id="`ansi-${color.key}`"
+                    v-model="preferences['ansi-' + color.key]"
+                    type="text"
+                    class="form-input mono"
+                    style="height: 28px; font-size: 12px;"
+                    placeholder="#000000"
+                  />
+                </div>
+                <input
+                  v-model="preferences['ansi-' + color.key]"
+                  type="color"
+                  class="color-picker-input"
+                  :aria-label="`${color.label} color picker`"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div v-if="prefsSuccess" class="alert-banner alert-ok">
+            <span>Preferences saved successfully.</span>
+          </div>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue';
+import { useTheme } from '../../theme';
 
-const passwordForm = ref<any>(null)
-const user = ref<any>({})
-const userInitials = ref('??')
+const { schemePreference, systemMode, setScheme } = useTheme();
+
+const user = ref<any>({});
+const userInitials = ref('??');
 
 const colors = [
   { key: 'black', label: 'Black' },
@@ -201,7 +192,7 @@ const colors = [
   { key: 'magenta', label: 'Magenta' },
   { key: 'cyan', label: 'Cyan' },
   { key: 'white', label: 'White' },
-]
+];
 
 const defaultColors: Record<string, string> = {
   'ansi-black': '#000000',
@@ -212,153 +203,173 @@ const defaultColors: Record<string, string> = {
   'ansi-magenta': '#bb00bb',
   'ansi-cyan': '#00bbbb',
   'ansi-white': '#ffffff',
-}
+};
 
-const preferences = ref<Record<string, string>>({})
-const savingPrefs = ref(false)
-const prefsSuccess = ref(false)
+const preferences = ref<Record<string, string>>({ ...defaultColors });
+const savingPrefs = ref(false);
+const prefsSuccess = ref(false);
 
-const currentPassword = ref('')
-const newPassword = ref('')
-const confirmPassword = ref('')
-const formValid = ref(false)
-const loading = ref(false)
+const currentPassword = ref('');
+const newPassword = ref('');
+const confirmPassword = ref('');
+const loading = ref(false);
+const statusMessage = ref('');
+const statusType = ref<'success' | 'error'>('success');
 
-const statusMessage = ref('')
-const statusType = ref<'success' | 'error'>('success')
+const passwordFormValid = computed(() => {
+  return Boolean(
+    currentPassword.value &&
+      newPassword.value.length >= 8 &&
+      newPassword.value === confirmPassword.value
+  );
+});
 
 onMounted(() => {
-  const userStr = localStorage.getItem('halyard_user')
+  const userStr = localStorage.getItem('halyard_user');
   if (userStr) {
     try {
-      const parsed = JSON.parse(userStr)
-      user.value = parsed
+      const parsed = JSON.parse(userStr);
+      user.value = parsed;
       if (parsed.real_name) {
-        userInitials.value = parsed.real_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
+        userInitials.value = parsed.real_name
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase();
       } else if (parsed.username) {
-        userInitials.value = parsed.username.substring(0, 2).toUpperCase()
+        userInitials.value = parsed.username.substring(0, 2).toUpperCase();
       }
-      
+
       if (parsed.preferences) {
-        preferences.value = { ...defaultColors, ...parsed.preferences }
-      } else {
-        preferences.value = { ...defaultColors }
+        preferences.value = { ...defaultColors, ...parsed.preferences };
       }
     } catch (e) {
-      console.error('Failed to parse user', e)
+      console.error('Failed to parse user', e);
     }
   }
-})
+});
 
 const handlePasswordUpdate = async () => {
-  if (!formValid.value) return
+  if (!passwordFormValid.value) return;
 
-  loading.value = true
-  statusMessage.value = ''
+  loading.value = true;
+  statusMessage.value = '';
 
   try {
-    const token = localStorage.getItem('halyard_token')
+    const token = localStorage.getItem('halyard_token');
     const res = await fetch('/api/auth/password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         current_password: currentPassword.value,
-        new_password: newPassword.value
-      })
-    })
+        new_password: newPassword.value,
+      }),
+    });
 
     if (!res.ok) {
-      const errText = await res.text()
-      throw new Error(errText || 'Failed to update password')
+      const errText = await res.text();
+      throw new Error(errText || 'Failed to update password');
     }
 
-    statusType.value = 'success'
-    statusMessage.value = 'Password updated successfully'
-    
-    // Reset form
-    currentPassword.value = ''
-    newPassword.value = ''
-    confirmPassword.value = ''
-    
-    nextTick(() => {
-      passwordForm.value?.resetValidation()
-    })
+    statusType.value = 'success';
+    statusMessage.value = 'Password updated successfully';
+    currentPassword.value = '';
+    newPassword.value = '';
+    confirmPassword.value = '';
   } catch (err: any) {
-    console.error('Password update failed:', err)
-    statusType.value = 'error'
-    statusMessage.value = err.message || 'An error occurred'
+    statusType.value = 'error';
+    statusMessage.value = err.message || 'An error occurred';
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const savePreferences = async () => {
-  savingPrefs.value = true
-  prefsSuccess.value = false
+  savingPrefs.value = true;
+  prefsSuccess.value = false;
 
   try {
-    const token = localStorage.getItem('halyard_token')
+    const token = localStorage.getItem('halyard_token');
     const res = await fetch('/api/user/preferences', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(preferences.value)
-    })
+      body: JSON.stringify(preferences.value),
+    });
 
     if (!res.ok) {
-      throw new Error('Failed to save preferences')
+      throw new Error('Failed to save preferences');
     }
 
-    const updatedPrefs = await res.json()
-    
-    // Update local user
+    const updatedPrefs = await res.json();
     if (user.value) {
-      user.value.preferences = updatedPrefs
-      localStorage.setItem('halyard_user', JSON.stringify(user.value))
+      user.value.preferences = updatedPrefs;
+      localStorage.setItem('halyard_user', JSON.stringify(user.value));
     }
 
-    // Apply CSS vars
     const root = document.documentElement;
     for (const [key, value] of Object.entries(updatedPrefs)) {
-      if (value) {
+      if (value && key.startsWith('ansi-')) {
         root.style.setProperty(`--${key}`, value as string);
       }
     }
 
-    prefsSuccess.value = true
-    setTimeout(() => prefsSuccess.value = false, 3000)
+    prefsSuccess.value = true;
+    setTimeout(() => { prefsSuccess.value = false; }, 3000);
   } catch (err) {
-    console.error('Failed to save preferences:', err)
+    console.error('Failed to save preferences:', err);
   } finally {
-    savingPrefs.value = false
+    savingPrefs.value = false;
   }
-}
+};
 </script>
 
 <style scoped>
-.tracking-wider {
-  letter-spacing: 0.06em !important;
+.profile-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  color: var(--text-1);
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.ansi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@container (width < 760px) {
+  .ansi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (width < 460px) {
+  .ansi-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .color-picker-input {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: none;
+  border: 1px solid var(--border-1);
   background: transparent;
   border-radius: 4px;
-  overflow: hidden;
-}
-.color-picker-input::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-.color-picker-input::-webkit-color-swatch {
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 </style>

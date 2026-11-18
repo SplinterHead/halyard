@@ -1,6 +1,7 @@
 <template>
   <DataTablePage
     title="Swarm Stacks"
+    subtitle="Deployed Docker Swarm stacks and aggregate replica health."
     :items="stacks"
     :headers="headers"
     :loading="loading"
@@ -9,90 +10,134 @@
     empty-description="Deploy your first docker-compose stack to see it managed here."
     search-placeholder="Search stacks..."
     :sort-by="[{ key: 'name', order: 'asc' }]"
-    :row-props="getRowProps"
+    clickable-rows
     @refresh="fetchStacks"
     @click:row="goToDetail"
   >
-    <template v-slot:top>
-      <v-dialog v-model="deleteDialog" max-width="400px">
-            <v-card border flat class="bg-surface">
-              <v-card-title class="pa-6 pb-2">Delete Stack?</v-card-title>
-              <v-card-text class="pa-6 pt-0">
-                Are you sure you want to remove the stack
-                <strong>{{ stackToDelete?.name }}</strong
-                >? This will stop and remove all associated services.
-                
-                <v-checkbox
-                  v-model="deleteVolumes"
-                  label="Delete associated volumes"
-                  color="error"
-                  hide-details
-                  class="mt-4"
-                ></v-checkbox>
-              </v-card-text>
-              <v-card-actions class="pa-6 pt-0">
-                <v-spacer></v-spacer>
-                <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-                <v-btn
-                  color="error"
-                  variant="flat"
-                  @click="deleteStack"
-                  :loading="deleting"
-                  >Remove Stack</v-btn
-                >
-              </v-card-actions>
-            </v-card>
-          </v-dialog>
+    <template #top>
+      <AppModal v-model="deleteDialog" title="Delete Stack?" :persistent="deleting">
+        <p class="text-2" style="margin: 0;">
+          Are you sure you want to remove the stack
+          <strong class="text-1">{{ stackToDelete?.name }}</strong>?
+          This will stop and remove all associated services.
+        </p>
+
+        <label class="nested-box flex-between" style="cursor: pointer;">
+          <span>
+            <strong class="fw-500 text-1" style="display: block;">Delete associated volumes</strong>
+            <span class="text-2" style="font-size: 12px;">Permanently remove volumes created for this stack</span>
+          </span>
+          <input v-model="deleteVolumes" type="checkbox" role="switch" class="toggle-switch" />
+        </label>
+
+        <template #footer>
+          <button type="button" class="btn" :disabled="deleting" @click="deleteDialog = false">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-danger" :disabled="deleting" @click="deleteStack">
+            {{ deleting ? 'Removing...' : 'Remove Stack' }}
+          </button>
+        </template>
+      </AppModal>
     </template>
-    <template v-slot:item.name="{ value }">
-              <span class="text-body-1 font-weight-medium">{{ value }}</span>
-            </template>
 
-            <template v-slot:item.services="{ value }">
-              <code class="text-caption">{{ value }}</code>
-            </template>
+    <template #item.name="{ item }">
+      <div class="flex-row">
+        <span class="status-dot" :class="getStatusDot(item.status)"></span>
+        <span class="fw-500 text-1">{{ item.name }}</span>
+      </div>
+    </template>
 
-            <template v-slot:item.updated_at="{ value }">
-              <div class="text-end">
-                <RelativeTime :value="value" />
-              </div>
-            </template>
+    <template #item.services="{ item }">
+      <span class="text-2">{{ item.services }}</span>
+    </template>
 
-            <template v-slot:item.actions="{ item }">
-              <div class="d-flex justify-center">
-                <v-btn
-                  v-if="item.name !== 'Orphaned/Manual'"
-                  icon="mdi-restart"
-                  size="x-small"
-                  variant="text"
-                  color="warning"
-                  :loading="restartingStack === item.name"
-                  @click.stop="restartStack(item.name)"
-                  title="Force Restart"
-                ></v-btn>
-                <v-btn
-                  v-if="item.name !== 'Orphaned/Manual'"
-                  icon="mdi-delete-outline"
-                  size="x-small"
-                  variant="text"
-                  color="error"
-                  @click.stop="confirmDelete(item)"
-                ></v-btn>
-              </div>
-            </template>
+    <template #item.updated_at="{ value }">
+      <div class="text-end">
+        <RelativeTime :value="value" />
+      </div>
+    </template>
+
+    <template #item.actions="{ item }">
+      <div class="d-flex justify-center" style="gap: 4px;">
+        <button
+          v-if="item.name !== 'Orphaned/Manual'"
+          type="button"
+          class="btn btn-icon btn-sm"
+          title="Force Restart"
+          aria-label="Force Restart"
+          :disabled="restartingStack === item.name"
+          @click.stop="restartStack(item.name)"
+        >
+          <v-icon size="15">mdi-restart</v-icon>
+        </button>
+        <button
+          v-if="item.name !== 'Orphaned/Manual'"
+          type="button"
+          class="btn btn-icon btn-sm btn-danger-subtle"
+          title="Delete Stack"
+          aria-label="Delete Stack"
+          @click.stop="confirmDelete(item)"
+        >
+          <v-icon size="15">mdi-delete-outline</v-icon>
+        </button>
+      </div>
+    </template>
+
+    <!-- Mobile Curated 2-Row Card -->
+    <template #mobile-item="{ item }">
+      <div
+        class="mobile-item-card"
+        role="button"
+        tabindex="0"
+        @click="goToDetail($event, { item })"
+        @keydown.enter="goToDetail($event, { item })"
+      >
+        <div class="mobile-card-top">
+          <div class="flex-row" style="min-width: 0;">
+            <span class="status-dot" :class="getStatusDot(item.status)"></span>
+            <span class="fw-500 text-1 text-truncate">{{ item.name }}</span>
+          </div>
+          <div v-if="item.name !== 'Orphaned/Manual'" class="flex-row" style="gap: 4px;">
+            <button
+              type="button"
+              class="btn btn-icon btn-sm"
+              title="Force Restart"
+              aria-label="Force Restart"
+              :disabled="restartingStack === item.name"
+              @click.stop="restartStack(item.name)"
+            >
+              <v-icon size="14">mdi-restart</v-icon>
+            </button>
+            <button
+              type="button"
+              class="btn btn-icon btn-sm btn-danger-subtle"
+              title="Delete Stack"
+              aria-label="Delete Stack"
+              @click.stop="confirmDelete(item)"
+            >
+              <v-icon size="14">mdi-delete-outline</v-icon>
+            </button>
+          </div>
+        </div>
+        <div class="mobile-card-bottom">
+          <span><span class="text-3">Services:</span> {{ item.services }}</span>
+          <span><span class="text-3">Updated:</span> {{ formatRelativeTime(item.updated_at) }}</span>
+        </div>
+      </div>
+    </template>
   </DataTablePage>
 </template>
 
 <script setup lang="ts">
-import DataTablePage from "../../components/DataTablePage.vue";
-import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
-import RelativeTime from "../../components/RelativeTime.vue";
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import DataTablePage from '../../components/DataTablePage.vue';
+import AppModal from '../../components/AppModal.vue';
+import RelativeTime from '../../components/RelativeTime.vue';
+import { formatRelativeTime } from '../../utils/time';
 
 const router = useRouter();
-const goToDetail = (_: any, { item }: any) => {
-  router.push(`/swarm/stacks/${item.name}`);
-};
 
 interface Stack {
   name: string;
@@ -111,56 +156,33 @@ const stackToDelete = ref<Stack | null>(null);
 const restartingStack = ref<string | null>(null);
 const deleteVolumes = ref(false);
 
-const getRowProps = ({ item }: any) => {
-  const status = item.status;
-  let colorClass = "status-grey";
-  if (status === "Healthy") colorClass = "status-success";
-  else if (status === "Degraded") colorClass = "status-warning";
-  else if (status === "Updating") colorClass = "status-info";
-
-  return {
-    class: `status-bar-row ${colorClass}`,
-  };
-};
-
 const headers = [
-  { title: "Stack Name", key: "name", sortable: true, align: "start" as const },
-  {
-    title: "Services",
-    key: "services",
-    width: "150px",
-    align: "start" as const,
-  },
-  { title: "Updated", key: "updated_at", width: "150px", align: "end" as const },
-  {
-    title: "Actions",
-    key: "actions",
-    width: "100px",
-    align: "center" as const,
-    sortable: false,
-  },
+  { title: 'Stack Name', key: 'name', sortable: true, align: 'start' as const },
+  { title: 'Services', key: 'services', width: '130px', align: 'start' as const },
+  { title: 'Updated', key: 'updated_at', width: '140px', align: 'end' as const },
+  { title: 'Actions', key: 'actions', width: '100px', align: 'center' as const, sortable: false },
 ];
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "Healthy":
-      return "success";
-    case "Degraded":
-      return "warning";
-    case "Updating":
-      return "info";
-    default:
-      return "grey";
-  }
+const getStatusDot = (status: string) => {
+  if (status === 'Healthy') return 'dot-ok';
+  if (status === 'Degraded') return 'dot-warn';
+  if (status === 'Updating') return 'dot-warn';
+  return '';
+};
+
+const goToDetail = (_: any, { item }: any) => {
+  router.push(`/swarm/stacks/${item.name}`);
 };
 
 const fetchStacks = async () => {
   loading.value = true;
   try {
-    const response = await fetch("/api/stacks");
-    stacks.value = await response.json();
+    const response = await fetch('/api/stacks');
+    if (response.ok) {
+      stacks.value = (await response.json()) || [];
+    }
   } catch (error) {
-    console.error("Failed to fetch stacks:", error);
+    console.error('Failed to fetch stacks:', error);
   } finally {
     loading.value = false;
   }
@@ -175,17 +197,16 @@ const confirmDelete = (stack: Stack) => {
 const restartStack = async (name: string) => {
   restartingStack.value = name;
   try {
-    const response = await fetch(`/api/stacks/restart?name=${name}`, {
-      method: "POST",
+    const response = await fetch(`/api/stacks/restart?name=${encodeURIComponent(name)}`, {
+      method: 'POST',
     });
     if (!response.ok) {
-      const text = await response.text();
-      alert("Failed to restart stack: " + text);
+      alert('Failed to restart stack: ' + (await response.text()));
     } else {
       await fetchStacks();
     }
   } catch (err) {
-    console.error("Failed to restart stack:", err);
+    console.error('Failed to restart stack:', err);
   } finally {
     restartingStack.value = null;
   }
@@ -195,18 +216,18 @@ const deleteStack = async () => {
   if (!stackToDelete.value) return;
   deleting.value = true;
   try {
-    const response = await fetch(`/api/stacks/${stackToDelete.value.name}?deleteVolumes=${deleteVolumes.value}`, {
-      method: "DELETE",
-    });
+    const response = await fetch(
+      `/api/stacks/${encodeURIComponent(stackToDelete.value.name)}?deleteVolumes=${deleteVolumes.value}`,
+      { method: 'DELETE' }
+    );
     if (response.ok) {
       await fetchStacks();
       deleteDialog.value = false;
     } else {
-      const text = await response.text();
-      alert("Failed to remove stack: " + text);
+      alert('Failed to remove stack: ' + (await response.text()));
     }
   } catch (err) {
-    console.error("Failed to delete stack:", err);
+    console.error('Failed to delete stack:', err);
   } finally {
     deleting.value = false;
   }
@@ -214,6 +235,3 @@ const deleteStack = async () => {
 
 onMounted(fetchStacks);
 </script>
-
-<style scoped>
-</style>

@@ -1,6 +1,7 @@
 <template>
   <DataTablePage
     title="Cluster Containers"
+    subtitle="All running and exited containers discovered across Swarm nodes."
     :items="containers"
     :headers="headers"
     :loading="loading"
@@ -9,79 +10,82 @@
     empty-description="Your cluster is currently empty. Deploy services or stacks to see containers here."
     search-placeholder="Search containers..."
     :sort-by="[{ key: 'names', order: 'asc' }]"
-    :row-props="getRowProps"
+    clickable-rows
     @refresh="fetchContainers"
     @click:row="goToDetail"
   >
-    <template v-slot:item.names="{ item }">
-              <div class="d-flex flex-column">
-                <span
-                  class="text-body-2 font-weight-bold truncate-text"
-                  :title="formatNames(item.names)"
-                >
-                  {{ formatNames(item.names) }}
-                </span>
-                <span
-                  class="text-caption text-primary truncate-text me-1"
-                  :title="item.image"
-                >
-                  {{ formatImage(item.image) }}
-                </span>
-              </div>
-            </template>
+    <template #item.names="{ item }">
+      <div class="d-flex flex-column" style="gap: 2px; min-width: 0;">
+        <div class="flex-row" style="min-width: 0;">
+          <span class="status-dot" :class="getStateDot(item.state)"></span>
+          <span class="fw-500 text-1 text-truncate" style="max-width: 520px;" :title="formatNames(item.names)">
+            {{ formatNames(item.names) }}
+          </span>
+        </div>
+        <span class="mono text-3 text-truncate" style="max-width: 520px; padding-inline-start: 15px;" :title="item.image">
+          {{ formatImage(item.image) }}
+        </span>
+      </div>
+    </template>
 
-            <template v-slot:item.up_to_date="{ item }">
-              <v-chip
-                v-if="!item.up_to_date"
-                color="warning"
-                size="x-small"
-                label
-                class="text-uppercase font-weight-bold"
-              >
-                Out of Date
-              </v-chip>
-              <v-chip
-                v-else
-                color="success"
-                variant="tonal"
-                size="x-small"
-                label
-                class="text-uppercase font-weight-bold"
-              >
-                Current
-              </v-chip>
-            </template>
+    <template #item.up_to_date="{ item }">
+      <span class="status-badge">
+        <span class="status-dot" :class="item.up_to_date ? 'dot-ok' : 'dot-warn'"></span>
+        {{ item.up_to_date ? 'Current' : 'Out of Date' }}
+      </span>
+    </template>
 
-            <template v-slot:item.service="{ item }">
-              <div class="d-flex flex-column">
-                <span class="text-caption font-weight-bold">{{
-                  item.service
-                }}</span>
-                <span class="text-caption text-grey">{{ item.stack }}</span>
-              </div>
-            </template>
+    <template #item.service="{ item }">
+      <div class="d-flex flex-column" style="gap: 2px;">
+        <span class="fw-500 text-1 text-truncate" style="max-width: 180px;" :title="item.service">{{ item.service || '—' }}</span>
+        <span class="text-3 text-truncate" style="font-size: 12px; max-width: 180px;" :title="item.stack">{{ item.stack || '—' }}</span>
+      </div>
+    </template>
 
-            <template v-slot:item.node="{ value }">
-              <code class="font-mono text-caption">{{ value }}</code>
-            </template>
+    <template #item.status="{ value }">
+      <span class="text-2 text-truncate d-inline-block" style="max-width: 170px;" :title="value">{{ value }}</span>
+    </template>
 
-            <template v-slot:item.status="{ value }">
-              <span class="text-caption text-grey">{{ value }}</span>
-            </template>
+    <template #item.node="{ value }">
+      <span class="text-2 text-truncate d-inline-block" style="max-width: 180px;" :title="value">{{ value }}</span>
+    </template>
 
-            <template v-slot:item.created_at="{ value }">
-              <div class="text-end">
-                <RelativeTime :value="value" />
-              </div>
-            </template>
+    <template #item.created_at="{ value }">
+      <div class="text-end">
+        <RelativeTime :value="value" />
+      </div>
+    </template>
+
+    <!-- Mobile Curated 2-Row Card -->
+    <template #mobile-item="{ item }">
+      <div
+        class="mobile-item-card"
+        role="button"
+        tabindex="0"
+        @click="goToDetail($event, { item })"
+        @keydown.enter="goToDetail($event, { item })"
+      >
+        <div class="mobile-card-top">
+          <div class="flex-row" style="min-width: 0;">
+            <span class="status-dot" :class="getStateDot(item.state)"></span>
+            <span class="fw-500 text-1 text-truncate">{{ formatNames(item.names) }}</span>
+          </div>
+          <span class="text-2" style="font-size: 12px;">{{ formatStateLabel(item.state) }}</span>
+        </div>
+        <div class="mobile-card-bottom">
+          <span><span class="text-3">Node:</span> {{ item.node }}</span>
+          <span><span class="text-3">Stack:</span> {{ item.stack || '—' }}</span>
+        </div>
+      </div>
+    </template>
   </DataTablePage>
 </template>
 
 <script setup lang="ts">
-import DataTablePage from "../../components/DataTablePage.vue";
-import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
-import RelativeTime from "../../components/RelativeTime.vue";
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import DataTablePage from '../../components/DataTablePage.vue';
+import RelativeTime from '../../components/RelativeTime.vue';
 
 const router = useRouter();
 
@@ -101,91 +105,61 @@ interface Container {
 const containers = ref<Container[]>([]);
 const loading = ref(false);
 
-const getRowProps = ({ item }: any) => {
-  const state = item.state.toLowerCase();
-  let colorClass = "status-grey";
-  if (state === "running") colorClass = "status-success";
-  else if (state === "exited") colorClass = "status-error";
-  else if (state === "created") colorClass = "status-info";
-  else if (state === "paused" || state === "restarting")
-    colorClass = "status-warning";
-
-  return {
-    class: `status-bar-row ${colorClass}`,
-  };
-};
-
 const headers = [
-  {
-    title: "Container / Image",
-    key: "names",
-    sortable: true,
-    align: "start" as const,
-  },
-  {
-    title: "Update",
-    key: "up_to_date",
-    width: "120px",
-    align: "start" as const,
-  },
-  {
-    title: "Service / Stack",
-    key: "service",
-    sortable: true,
-    align: "start" as const,
-  },
-  { title: "Status", key: "status", align: "start" as const },
-  { title: "Node", key: "node", width: "150px", align: "start" as const },
-  { title: "Created", key: "created_at", align: "end" as const },
+  { title: 'Container / Image', key: 'names', sortable: true, align: 'start' as const },
+  { title: 'Update', key: 'up_to_date', width: '130px', align: 'start' as const },
+  { title: 'Service / Stack', key: 'service', width: '200px', sortable: true, align: 'start' as const },
+  { title: 'Status', key: 'status', width: '190px', align: 'start' as const },
+  { title: 'Node', key: 'node', width: '200px', sortable: true, align: 'start' as const },
+  { title: 'Created', key: 'created_at', width: '130px', align: 'end' as const },
 ];
 
-const getStateColor = (state: string) => {
-  switch (state.toLowerCase()) {
-    case "running":
-      return "success";
-    case "exited":
-      return "error";
-    case "created":
-      return "info";
-    case "paused":
-      return "warning";
-    case "restarting":
-      return "warning";
+const getStateDot = (state: string) => {
+  switch ((state || '').toLowerCase()) {
+    case 'running':
+      return 'dot-ok';
+    case 'exited':
+      return 'dot-err';
+    case 'paused':
+    case 'restarting':
+      return 'dot-warn';
     default:
-      return "grey";
+      return '';
   }
+};
+
+const formatStateLabel = (state: string) => {
+  if (!state) return 'Unknown';
+  return state.charAt(0).toUpperCase() + state.slice(1).toLowerCase();
 };
 
 const formatImage = (image: string) => {
-  if (!image) return "-";
-  // Remove digest if present
-  let clean = image.split("@")[0];
-  
-  // Strip tag (everything after the last colon, excluding any registry port)
-  const slashParts = clean.split("/");
+  if (!image) return '-';
+  let clean = image.split('@')[0];
+  const slashParts = clean.split('/');
   const lastPart = slashParts[slashParts.length - 1];
-  
-  if (lastPart.includes(":")) {
-    const colonParts = lastPart.split(":");
-    slashParts[slashParts.length - 1] = colonParts.slice(0, -1).join(":");
-    clean = slashParts.join("/");
+  if (lastPart.includes(':')) {
+    const colonParts = lastPart.split(':');
+    slashParts[slashParts.length - 1] = colonParts.slice(0, -1).join(':');
+    clean = slashParts.join('/');
   }
-  
   return clean;
 };
 
 const formatNames = (names: string[]) => {
-  if (!names || names.length === 0) return "-";
-  return names[0].replace(/^\//, "");
+  if (!names || names.length === 0) return '-';
+  return names[0].replace(/^\//, '');
 };
 
 const fetchContainers = async () => {
   loading.value = true;
   try {
-    const response = await fetch("/api/containers");
-    containers.value = await response.json();
+    const response = await fetch('/api/containers');
+    if (response.ok) {
+      containers.value = (await response.json()) || [];
+    }
   } catch (error) {
-    console.error("Failed to fetch containers:", error);
+    console.error('Failed to fetch containers:', error);
   } finally {
     loading.value = false;
   }
@@ -193,7 +167,7 @@ const fetchContainers = async () => {
 
 const goToDetail = (_event: any, { item }: any) => {
   router.push({
-    name: "container-detail",
+    name: 'container-detail',
     params: { id: item.id },
     query: { node: item.node },
   });
@@ -201,15 +175,3 @@ const goToDetail = (_event: any, { item }: any) => {
 
 onMounted(fetchContainers);
 </script>
-
-<style scoped>
-.truncate-text {
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.clickable-rows :deep(tbody tr) {
-  cursor: pointer;
-}
-</style>
